@@ -1,0 +1,9 @@
+import { cookies } from "next/headers";
+import { PORTAL_COOKIES, verifySessionToken } from "@rizlife/shared/auth";
+import type { SessionPayload } from "@rizlife/shared/types";
+
+export async function getTeacherSession(): Promise<SessionPayload | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(PORTAL_COOKIES.teacher)?.value;
+  return verifySessionToken(token, "teacher");
+}

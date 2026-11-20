@@ -1,0 +1,163 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum QuestCategory {
+  SELF_PACED
+  ON_SITE_LIBRARY
+  CREATIVE_OUTPUT
+  REFLECTION
+}
+
+enum SubmissionStatus {
+  NOT_STARTED
+  PENDING_REVIEW
+  STAMPED
+  NEEDS_REVISION
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  studentId          String?  @unique
+  firstName          String
+  middleName         String?
+  lastName           String
+  email              String   @unique
+  passwordHash       String?
+  role               Role     @default(STUDENT)
+  courseCode         String?
+  mustChangePassword Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  microsoftOid       String?  @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  taughtSections     Section[]        @relation("TeacherSections")
+  enrollments        Enrollment[]
+  submissions        Submission[]     @relation("StudentSubmissions")
+  stampedSubmissions Submission[]     @relation("StampedByUser")
+  digestLogs         EmailDigestLog[]
+}
+
+model Section {
+  id                 String    @id @default(cuid())
+  code               String
+  name               String
+  term               String
+  teacherId          String?
+  leaderboardVisible Boolean   @default(false)
+  digestThreshold    Int       @default(20)
+  digestEnabled      Boolean   @default(true)
+  lastDigestSentAt   DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  teacher     User?            @relation("TeacherSections", fields: [teacherId], references: [id], onDelete: SetNull)
+  enrollments Enrollment[]
+  quests      Quest[]
+  digestLogs  EmailDigestLog[]
+
+  @@unique([code, term])
+  @@index([teacherId])
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  studentId  String
+  sectionId  String
+  enrolledAt DateTime @default(now())
+
+  student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, sectionId])
+  @@index([sectionId])
+}
+
+model Quest {
+  id              String        @id @default(cuid())
+  sectionId       String
+  taskNumber      Int
+  title           String
+  description     String        @db.Text
+  category        QuestCategory @default(SELF_PACED)
+  openlearningUrl String?
+  startDate       DateTime?
+  deadline        DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  section     Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([sectionId, taskNumber])
+  @@index([sectionId])
+}
+
+model Submission {
+  id               String           @id @default(cuid())
+  questId          String
+  studentId        String
+  submissionUrl    String?
+  studentNote      String?          @db.Text
+  status           SubmissionStatus @default(NOT_STARTED)
+  teacherFeedback  String?          @db.Text
+  firstSubmittedAt DateTime?
+  submittedAt      DateTime?
+  stampedAt        DateTime?
+  stampedById      String?
+  includedInDigest Boolean          @default(false)
+  updatedAt        DateTime         @updatedAt
+
+  quest     Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+  student   User  @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
+  stampedBy User? @relation("StampedByUser", fields: [stampedById], references: [id], onDelete: SetNull)
+
+  @@unique([questId, studentId])
+  @@index([status, includedInDigest])
+  @@index([studentId])
+}
+
+model EmailDigestLog {
+  id              String   @id @default(cuid())
+  teacherId       String
+  sectionId       String
+  recipientEmail  String
+  subject         String
+  submissionCount Int
+  triggerType     String
+  deliveryStatus  String
+  htmlPreview     String   @db.Text
+  errorMessage    String?
+  sentAt          DateTime @default(now())
+
+  teacher User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId, sentAt])
+}
+
+model SystemSetting {
+  id                   String   @id @default("global")
+  activeTerm           String   @default("Term 2 AY 2026-2027")
+  defaultDigestThreshold Int    @default(20)
+  digestCronSchedule   String   @default("0 8,17 * * *")
+  emailProvider        String   @default("preview")
+  emailFromAddress     String   @default("RizLife QuestCard <noreply@rizlife.apc.edu.ph>")
+  allowedStudentDomain String   @default("student.apc.edu.ph")
+  allowedStaffDomain   String   @default("apc.edu.ph")
+  microsoftSsoEnabled  Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
+}

@@ -1,0 +1,390 @@
+@theme {
+  --font-serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-heritage: "Cinzel", "Playfair Display", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --parchment: #f7f1e2;
+  --parchment-deep: #efe6d2;
+  --card-surface: #faf6ec;
+  --border-archival: #c6b393;
+  --ink-primary: #16192c;
+  --ink-sepia: #2c2520;
+  --ink-muted: #5e5246;
+  --brass: #d4ab50;
+  --brass-dark: #8a6923;
+  --stamp-emerald: #0e8f47;
+  --stamp-emerald-bright: #0db852;
+  --stamp-bronze: #b4843e;
+  --stamp-crimson: #9e2a2b;
+  --stamp-slate: #4f453f;
+  --stamp-tan: #c7a582;
+}
+
+body {
+  background-color: var(--parchment);
+  color: var(--ink-sepia);
+  font-family: var(--font-sans);
+  background-image: radial-gradient(rgba(22, 25, 44, 0.035) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.font-display {
+  font-family: var(--font-serif);
+}
+
+.font-heritage {
+  font-family: var(--font-heritage);
+}
+
+/* Sharp Architectural Folio Containers */
+.folio-panel {
+  background-color: #faf6ec;
+  border: 1.5px solid #c6b393;
+  border-radius: 2px;
+  box-shadow: 4px 4px 0 rgba(22, 25, 44, 0.07);
+}
+
+.folio-panel-dark {
+  background-color: #16192c;
+  border: 1.5px solid #c59b42;
+  border-radius: 2px;
+  color: #faf6ec;
+  box-shadow: 4px 4px 0 rgba(197, 155, 66, 0.16);
+}
+
+.folio-tonal {
+  background-color: #efe6d2;
+  border: 1px solid #d3c3a7;
+  border-radius: 2px;
+}
+
+.folio-input {
+  background-color: #fffdf9;
+  border: 1.5px solid #c6b393;
+  border-radius: 2px;
+  color: #16192c;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.folio-input:focus {
+  border-color: #16192c;
+  box-shadow: 0 0 0 2px rgba(212, 171, 80, 0.28);
+}
+
+/* Tactile Physical-Ledge Heritage Buttons */
+.btn-heritage-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 2px;
+  background-color: #0e8f47;
+  border: 1.5px solid #09592c;
+  border-bottom: 3px solid #074421;
+  color: #ffffff;
+  font-weight: 700;
+  transition: transform 80ms ease, background-color 120ms ease;
+  cursor: pointer;
+}
+
+.btn-heritage-primary:hover:not(:disabled) {
+  background-color: #11a352;
+}
+
+.btn-heritage-primary:active:not(:disabled) {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.btn-heritage-brass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 2px;
+  background-color: #d4ab50;
+  border: 1.5px solid #8a6923;
+  border-bottom: 3px solid #6e5116;
+  color: #16192c;
+  font-weight: 700;
+  transition: transform 80ms ease, background-color 120ms ease;
+  cursor: pointer;
+}
+
+.btn-heritage-brass:hover:not(:disabled) {
+  background-color: #dfb860;
+}
+
+.btn-heritage-brass:active:not(:disabled) {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.btn-heritage-ink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 2px;
+  background-color: #16192c;
+  border: 1.5px solid #0b0d18;
+  border-bottom: 3px solid #06070d;
+  color: #faf6ec;
+  font-weight: 700;
+  transition: transform 80ms ease, background-color 120ms ease;
+  cursor: pointer;
+}
+
+.btn-heritage-ink:hover:not(:disabled) {
+  background-color: #232844;
+}
+
+.btn-heritage-ink:active:not(:disabled) {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.btn-heritage-paper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 2px;
+  background-color: #faf6ec;
+  border: 1.5px solid #b5a07d;
+  border-bottom: 3px solid #96815e;
+  color: #16192c;
+  font-weight: 600;
+  transition: transform 80ms ease, background-color 120ms ease;
+  cursor: pointer;
+}
+
+.btn-heritage-paper:hover:not(:disabled) {
+  background-color: #efe6d2;
+}
+
+.btn-heritage-paper:active:not(:disabled) {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.btn-heritage-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 2px;
+  background-color: #a92b2c;
+  border: 1.5px solid #6f191a;
+  border-bottom: 3px solid #521011;
+  color: #ffffff;
+  font-weight: 700;
+  transition: transform 80ms ease, background-color 120ms ease;
+  cursor: pointer;
+}
+
+.btn-heritage-danger:hover:not(:disabled) {
+  background-color: #be3334;
+}
+
+.btn-heritage-danger:active:not(:disabled) {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+/* Handcrafted Sidebar Navigation Plaques */
+.nav-plaque-active {
+  background: linear-gradient(180deg, #f6ebd5 0%, #ead8b5 100%);
+  border: 1.5px solid #c59b42;
+  border-bottom: 3px solid #8a6923;
+  border-radius: 2px;
+  color: #16192c;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.nav-plaque-idle {
+  background-color: #1d2138;
+  border: 1px solid #2e3456;
+  border-radius: 2px;
+  color: #d9ceb8;
+  transition: all 120ms ease;
+}
+
+.nav-plaque-idle:hover {
+  background-color: #262c49;
+  border-color: #c59b42;
+  color: #faf6ec;
+}
+
+/* Engraved Header Stat Plaques */
+.stat-plaque {
+  background: linear-gradient(180deg, #faf3e4 0%, #ede0c4 100%);
+  border: 1.5px solid #b59a6c;
+  border-bottom: 3px solid #8e754a;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+/* Authentic Rizal Quest Card linen postcard interior (Canva torn-parchment over vintage letters) */
+.rizal-postcard-outer {
+  background-color: #efe6d2;
+  border: 2px solid #16192c;
+  border-radius: 2px;
+  box-shadow: 6px 6px 0 rgba(22, 25, 44, 0.14);
+}
+
+.rizal-torn-parchment {
+  position: relative;
+  background-color: #efe7d6;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(130, 102, 64, 0.055) 0px,
+      rgba(130, 102, 64, 0.055) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
+    radial-gradient(
+      ellipse at center,
+      rgba(253, 248, 238, 0.65) 0%,
+      rgba(227, 214, 190, 0.5) 100%
+    );
+  border: 1.5px solid #cab694;
+  box-shadow:
+    0 6px 18px rgba(44, 37, 32, 0.18),
+    inset 0 0 28px rgba(173, 147, 108, 0.2);
+  clip-path: polygon(
+    1% 2%, 5% 0.5%, 11% 2%, 18% 0.6%, 26% 1.8%, 35% 0.4%, 44% 1.7%, 53% 0.5%,
+    62% 1.9%, 71% 0.6%, 80% 1.8%, 88% 0.5%, 95% 2%, 99% 1%,
+    99.6% 9%, 98.4% 18%, 99.5% 28%, 98.3% 39%, 99.6% 50%, 98.5% 62%, 99.4% 74%, 98.3% 86%, 99.3% 97%,
+    95% 99.2%, 87% 98.1%, 78% 99.4%, 69% 98.2%, 59% 99.5%, 49% 98.3%, 39% 99.4%, 29% 98.1%, 19% 99.3%, 10% 98.2%, 2% 99.1%,
+    0.6% 90%, 1.7% 79%, 0.5% 67%, 1.6% 55%, 0.4% 43%, 1.6% 31%, 0.5% 19%, 1.5% 9%
+  );
+}
+
+.rizal-postcard-frame {
+  position: relative;
+  background-color: #f6f0e4;
+  border: 1.5px solid #b8a381;
+  border-radius: 1px;
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgba(180, 132, 62, 0.04) 1px,
+      transparent 1px
+    );
+  background-size: 100% 6px;
+}
+
+@keyframes stampPress {
+  0% {
+    transform: scale(1.22) rotate(-10deg);
+    opacity: 0.7;
+  }
+  65% {
+    transform: scale(0.94) rotate(-2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes rubberStampSlam {
+  0% {
+    transform: scale(2.25) rotate(-18deg) translateY(-10px);
+    opacity: 0;
+  }
+  52% {
+    transform: scale(0.9) rotate(-3deg) translateY(0);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.06) rotate(1.5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes inkRingBurst {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+@keyframes stampPeelLift {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1.12) rotate(6deg);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(0.35) rotate(-22deg) translateY(-10px);
+    opacity: 0;
+  }
+}
+
+@keyframes stampClearedPop {
+  0% {
+    transform: scale(0.84);
+    opacity: 0.5;
+  }
+  65% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pendingPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 155, 56, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(217, 155, 56, 0);
+  }
+}
+
+.animate-stamp-press {
+  animation: stampPress 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-rubber-stamp {
+  animation: rubberStampSlam 560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-ink-burst {
+  animation: inkRingBurst 680ms ease-out forwards;
+}
+
+.animate-stamp-remove {
+  animation: stampPeelLift 460ms cubic-bezier(0.36, 0, 0.66, -0.56) forwards;
+}
+
+.animate-stamp-cleared-pop {
+  animation: stampClearedPop 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-pending-pulse {
+  animation: pendingPulse 2.2s ease-in-out infinite;
+}
