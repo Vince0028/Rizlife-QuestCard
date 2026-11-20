@@ -1940,17 +1940,17 @@ export function TeacherWorkspace({
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-[#C6B393] bg-white">
+          <div className="overflow-x-auto touch-pan-x border border-[#C6B393] bg-white">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b-2 border-[#C6B393] bg-[#EFE6D2] text-[#16192C]">
-                  <th className="sticky left-0 z-20 min-w-[115px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5 font-mono">
+                  <th className="md:sticky md:left-0 md:z-20 min-w-[115px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5 font-mono">
                     Student ID
                   </th>
-                  <th className="sticky left-[115px] z-20 min-w-[125px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
+                  <th className="md:sticky md:left-[115px] md:z-20 min-w-[125px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
                     Last Name
                   </th>
-                  <th className="sticky left-[240px] z-20 min-w-[135px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
+                  <th className="md:sticky md:left-[240px] md:z-20 min-w-[135px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
                     First Name
                   </th>
                   <th className="min-w-[115px] border-r border-[#C6B393] px-3 py-2.5">
@@ -1985,13 +1985,13 @@ export function TeacherWorkspace({
                       key={st.id}
                       className="border-b border-[#EFE6D2] hover:bg-[#FAF6EC]"
                     >
-                      <td className="sticky left-0 z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-mono text-[11px] font-semibold text-[#16192C]">
+                      <td className="md:sticky md:left-0 md:z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-mono text-[11px] font-semibold text-[#16192C]">
                         {st.studentId || "-"}
                       </td>
-                      <td className="sticky left-[115px] z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-bold text-[#16192C]">
+                      <td className="md:sticky md:left-[115px] md:z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-bold text-[#16192C]">
                         {st.lastName}
                       </td>
-                      <td className="sticky left-[240px] z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-semibold text-[#16192C]">
+                      <td className="md:sticky md:left-[240px] md:z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-semibold text-[#16192C]">
                         {st.firstName}
                       </td>
                       <td className="border-r border-[#EFE6D2] px-3 py-2 text-[#5E5246]">

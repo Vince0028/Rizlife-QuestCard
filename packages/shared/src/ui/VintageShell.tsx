@@ -170,26 +170,35 @@ export function VintageShell({
         {sidebarContent}
       </aside>
 
-      {/* Mobile Drawer Sidebar */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div
-            className="fixed inset-0 bg-[#16192C]/60"
+      {/* Mobile Drawer Sidebar (Smooth Slide-In / Slide-Out) */}
+      <div
+        aria-hidden={!mobileMenuOpen}
+        className={`fixed inset-0 z-50 flex lg:hidden transition-opacity duration-300 ease-in-out ${
+          mobileMenuOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+      >
+        <div
+          className="fixed inset-0 bg-[#16192C]/60 backdrop-blur-[1px] transition-opacity duration-300 ease-in-out"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+        <div
+          className={`relative z-10 h-full w-64 transform transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <button
+            type="button"
             onClick={() => setMobileMenuOpen(false)}
-          />
-          <div className="relative z-10 h-full w-64">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(false)}
-              aria-label="Close navigation"
-              className="absolute right-2 top-2 z-20 border border-[#C59B42] bg-[#16192C] p-1.5 text-[#FAF6EC]"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            {sidebarContent}
-          </div>
+            aria-label="Close navigation"
+            className="absolute right-2 top-2 z-20 border border-[#C59B42] bg-[#16192C] p-1.5 text-[#FAF6EC] cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          {sidebarContent}
         </div>
-      )}
+      </div>
 
       {/* Main Ivory Content Column */}
       <div className="flex min-w-0 flex-1 flex-col">
