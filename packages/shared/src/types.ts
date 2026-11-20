@@ -17,6 +17,7 @@ export interface SessionPayload {
   email: string;
   role: RoleValue;
   firstName: string;
+  middleName?: string | null;
   lastName: string;
   studentId: string | null;
   courseCode: string | null;
@@ -29,6 +30,7 @@ export interface LeaderboardEntry {
   studentId: string;
   studentNumber: string | null;
   firstName: string;
+  middleName?: string | null;
   lastName: string;
   fullName: string;
   courseCode: string | null;

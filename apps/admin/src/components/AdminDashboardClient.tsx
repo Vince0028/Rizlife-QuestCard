@@ -225,7 +225,9 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     return data.users.filter((u) => {
       if (roleFilter !== "ALL" && u.role !== roleFilter) return false;
       if (!q) return true;
-      return `${u.lastName} ${u.firstName} ${u.email} ${u.studentId ?? ""}`
+      return `${u.lastName} ${u.firstName} ${u.middleName ?? ""} ${u.email} ${
+        u.studentId ?? ""
+      }`
         .toLowerCase()
         .includes(q);
     });
@@ -829,7 +831,10 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                 <thead>
                   <tr className="border-b-2 border-[#C6B393] bg-[#EFE6D2]">
                     <th className="px-3 py-2.5">Role</th>
-                    <th className="px-3 py-2.5">Name</th>
+                    <th className="px-3 py-2.5">Last Name</th>
+                    <th className="px-3 py-2.5">First Name</th>
+                    <th className="px-3 py-2.5">Middle Name</th>
+                    <th className="px-3 py-2.5">Student ID / Course</th>
                     <th className="px-3 py-2.5">Email</th>
                     <th className="px-3 py-2.5">Status</th>
                     <th className="px-3 py-2.5 text-right">Actions</th>
@@ -853,12 +858,18 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                         </span>
                       </td>
                       <td className="px-3 py-2 font-bold text-[#16192C]">
-                        {u.lastName}, {u.firstName}
-                        {u.studentId && (
-                          <div className="font-mono text-[10px] font-normal text-[#5E5246]">
-                            {u.studentId} • {u.courseCode || "APC"}
-                          </div>
-                        )}
+                        {u.lastName}
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-[#16192C]">
+                        {u.firstName}
+                      </td>
+                      <td className="px-3 py-2 text-[#5E5246]">
+                        {u.middleName || "-"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-[#5E5246]">
+                        {u.studentId
+                          ? `${u.studentId} • ${u.courseCode || "APC"}`
+                          : "-"}
                       </td>
                       <td className="px-3 py-2 font-mono text-[11px]">{u.email}</td>
                       <td className="px-3 py-2">
@@ -1091,42 +1102,61 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             </select>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <input
-              required
-              placeholder="First Name"
-              value={newFirst}
-              onChange={(e) => setNewFirst(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
-            <input
-              required
-              placeholder="Last Name"
-              value={newLast}
-              onChange={(e) => setNewLast(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
+          <div className="grid gap-2.5 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                Last Name
+              </label>
+              <input
+                required
+                placeholder="Last Name"
+                value={newLast}
+                onChange={(e) => setNewLast(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                First Name
+              </label>
+              <input
+                required
+                placeholder="First Name"
+                value={newFirst}
+                onChange={(e) => setNewFirst(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                Middle Name
+              </label>
+              <input
+                placeholder="Middle Name (optional)"
+                value={newMiddle}
+                onChange={(e) => setNewMiddle(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
           </div>
 
-          <input
-            placeholder="Middle Name (optional)"
-            value={newMiddle}
-            onChange={(e) => setNewMiddle(e.target.value)}
-            className="folio-input w-full px-3 py-2 text-xs"
-          />
-
-          <input
-            required
-            type="email"
-            placeholder={
-              newRole === "STUDENT"
-                ? "student@student.apc.edu.ph"
-                : "faculty@apc.edu.ph"
-            }
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            className="folio-input w-full px-3 py-2 text-xs"
-          />
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+              APC Email
+            </label>
+            <input
+              required
+              type="email"
+              placeholder={
+                newRole === "STUDENT"
+                  ? "student@student.apc.edu.ph"
+                  : "faculty@apc.edu.ph"
+              }
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="folio-input w-full px-3 py-2 text-xs"
+            />
+          </div>
 
           {newRole === "STUDENT" && (
             <div className="grid gap-2 sm:grid-cols-2">
@@ -1288,7 +1318,18 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                 <option value="STUDENT">Student</option>
               </select>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                  Last Name
+                </label>
+                <input
+                  required
+                  value={editUserLast}
+                  onChange={(e) => setEditUserLast(e.target.value)}
+                  className="folio-input w-full px-3 py-2 text-xs"
+                />
+              </div>
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
                   First Name
@@ -1302,25 +1343,14 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
               </div>
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                  Last Name
+                  Middle Name
                 </label>
                 <input
-                  required
-                  value={editUserLast}
-                  onChange={(e) => setEditUserLast(e.target.value)}
+                  value={editUserMiddle}
+                  onChange={(e) => setEditUserMiddle(e.target.value)}
                   className="folio-input w-full px-3 py-2 text-xs"
                 />
               </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                Middle Name (Optional)
-              </label>
-              <input
-                value={editUserMiddle}
-                onChange={(e) => setEditUserMiddle(e.target.value)}
-                className="folio-input w-full px-3 py-2 text-xs"
-              />
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">

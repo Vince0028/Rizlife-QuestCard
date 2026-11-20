@@ -4,6 +4,7 @@ export interface LeaderboardStudentInput {
   id: string;
   studentId: string | null;
   firstName: string;
+  middleName?: string | null;
   lastName: string;
   courseCode: string | null;
 }
@@ -85,8 +86,11 @@ export function computeLeaderboard(
       studentId: student.id,
       studentNumber: student.studentId,
       firstName: student.firstName,
+      middleName: student.middleName ?? null,
       lastName: student.lastName,
-      fullName: `${student.lastName}, ${student.firstName}`,
+      fullName: `${student.lastName}, ${student.firstName}${
+        student.middleName ? ` ${student.middleName}` : ""
+      }`,
       courseCode: student.courseCode,
       stampedCount,
       pendingCount,

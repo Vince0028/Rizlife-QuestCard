@@ -257,9 +257,9 @@ INSERT INTO "User" (
 ),
 (
   'usr_student_vince',
-  '2024-140001',
-  'Vince',
-  NULL,
+  '2024-140101',
+  'Vince Nelmar',
+  'Pega',
   'Alobin',
   'vpalobin@student.apc.edu.ph',
   '$2b$10$N2qYNY8Prf2CFM4ZVkIK8OjpaDFbA.E6xLCCWystzp0L32dFcWp6i',
@@ -270,7 +270,14 @@ INSERT INTO "User" (
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
 )
-ON CONFLICT ("email") DO NOTHING;
+ON CONFLICT ("email") DO UPDATE
+SET
+  "studentId" = EXCLUDED."studentId",
+  "lastName" = EXCLUDED."lastName",
+  "firstName" = EXCLUDED."firstName",
+  "middleName" = EXCLUDED."middleName",
+  "courseCode" = EXCLUDED."courseCode",
+  "updatedAt" = CURRENT_TIMESTAMP;
 
 -- 7. Section BSIT assigned to the First Teacher (tasks left empty for testing)
 INSERT INTO "Section" (
@@ -321,17 +328,19 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
 
--- 10. Quick Verification Output
+-- 10. Quick Verification Output (Last Name, First Name, Middle Name)
 SELECT
   u."role",
-  u."email",
-  u."firstName",
-  u."lastName",
   u."studentId",
+  u."lastName",
+  u."firstName",
+  u."middleName",
+  u."courseCode",
+  u."email",
   s."code" AS "sectionCode"
 FROM "User" u
 LEFT JOIN "Section" s ON s."teacherId" = u."id"
   OR EXISTS (
     SELECT 1 FROM "Enrollment" e WHERE e."studentId" = u."id" AND e."sectionId" = s."id"
   )
-ORDER BY u."role", u."email";
+ORDER BY u."role", u."lastName", u."firstName";

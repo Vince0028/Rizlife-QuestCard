@@ -234,7 +234,10 @@ async function run() {
   );
   assert.equal(parsedImport.errors.length, 0);
   assert.equal(parsedImport.rows.length, 2);
-  assert.equal(parsedImport.rows[0].studentId, "2024-140201");
+  assert.equal(parsedImport.rows[0].studentId, "2024-140101");
+  assert.equal(parsedImport.rows[0].lastName, "Alobin");
+  assert.equal(parsedImport.rows[0].firstName, "Vince Nelmar");
+  assert.equal(parsedImport.rows[0].middleName, "Pega");
 
   console.log("ALL CORE VERIFICATION CHECKS PASSED!");
 }

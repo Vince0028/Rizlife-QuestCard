@@ -4,7 +4,17 @@
 -- Safe to re-run multiple times (idempotent upsert by sectionId + taskNumber).
 -- ============================================================================
 
--- 1. Ensure Section BSIT (assigned to usr_teacher_01) and Vince's enrollment exist
+-- 1. Ensure Section BSIT (assigned to usr_teacher_01) and Vince's profile & enrollment exist
+UPDATE "User"
+SET
+  "studentId" = '2024-140101',
+  "lastName" = 'Alobin',
+  "firstName" = 'Vince Nelmar',
+  "middleName" = 'Pega',
+  "courseCode" = 'BSIT',
+  "updatedAt" = CURRENT_TIMESTAMP
+WHERE "email" = 'vpalobin@student.apc.edu.ph';
+
 INSERT INTO "Section" (
   "id",
   "code",

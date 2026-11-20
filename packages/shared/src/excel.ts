@@ -544,7 +544,7 @@ export async function parseStudentImportFile(
 export function generateStudentImportCsvTemplate(): string {
   return [
     "Student ID,Last Name,First Name,Middle Name,Course Code,APC Email,Default Password",
-    "2024-140201,Bautista,Rafael,Cruz,BSIT,rbautista@student.apc.edu.ph,Student@2026",
-    "2024-140202,Villanueva,Sofia,Reyes,BSIT-MI,svillanueva@student.apc.edu.ph,Student@2026",
+    "2024-140101,Alobin,Vince Nelmar,Pega,BSIT,vpalobin@student.apc.edu.ph,Student@2026",
+    "2024-140320,Albania,Roman Rico,Bundalian,BSIT,rbalbania2@student.apc.edu.ph,Student@2026",
   ].join("\r\n");
 }

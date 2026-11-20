@@ -381,7 +381,9 @@ export function StudentDashboardClient({
           {/* TAB: AUTHENTIC RIZAL QUEST CARD */}
           {tab === "card" && (
             <RizalQuestCardBoard
-              studentName={`${initialUser.lastName}, ${initialUser.firstName}`}
+              studentName={`${initialUser.lastName}, ${initialUser.firstName}${
+                initialUser.middleName ? ` ${initialUser.middleName}` : ""
+              }`}
               studentNumber={initialUser.studentId}
               courseCode={initialUser.courseCode}
               sectionCode={data.activeSection.code}

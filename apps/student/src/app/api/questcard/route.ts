@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
               id: true,
               studentId: true,
               firstName: true,
+              middleName: true,
               lastName: true,
               courseCode: true,
             },

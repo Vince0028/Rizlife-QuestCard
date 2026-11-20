@@ -100,6 +100,7 @@ export interface WorkspaceSubmissionItem {
     id: string;
     studentId: string | null;
     firstName: string;
+    middleName?: string | null;
     lastName: string;
     courseCode: string | null;
     email: string;
@@ -593,9 +594,9 @@ export function TeacherWorkspace({
         return false;
       }
       if (!q) return true;
-      const full = `${st.lastName} ${st.firstName} ${st.studentId ?? ""} ${
-        st.email
-      }`.toLowerCase();
+      const full = `${st.lastName} ${st.firstName} ${st.middleName ?? ""} ${
+        st.studentId ?? ""
+      } ${st.email}`.toLowerCase();
       return full.includes(q);
     });
   }, [workspace, trackerSearch, trackerCourseFilter]);
@@ -1835,7 +1836,11 @@ export function TeacherWorkspace({
 
           {activeStampCardStudent ? (
             <RizalQuestCardBoard
-              studentName={`${activeStampCardStudent.lastName}, ${activeStampCardStudent.firstName}`}
+              studentName={`${activeStampCardStudent.lastName}, ${activeStampCardStudent.firstName}${
+                activeStampCardStudent.middleName
+                  ? ` ${activeStampCardStudent.middleName}`
+                  : ""
+              }`}
               studentNumber={activeStampCardStudent.studentId}
               courseCode={activeStampCardStudent.courseCode}
               sectionCode={workspace.section.code}
@@ -1942,8 +1947,14 @@ export function TeacherWorkspace({
                   <th className="sticky left-0 z-20 min-w-[115px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5 font-mono">
                     Student ID
                   </th>
-                  <th className="sticky left-[115px] z-20 min-w-[175px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
-                    Student Name
+                  <th className="sticky left-[115px] z-20 min-w-[125px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
+                    Last Name
+                  </th>
+                  <th className="sticky left-[240px] z-20 min-w-[135px] border-r border-[#C6B393] bg-[#EFE6D2] px-3 py-2.5">
+                    First Name
+                  </th>
+                  <th className="min-w-[115px] border-r border-[#C6B393] px-3 py-2.5">
+                    Middle Name
                   </th>
                   <th className="px-3 py-2.5">Course</th>
                   <th className="px-3 py-2.5 text-center">Progress</th>
@@ -1978,7 +1989,13 @@ export function TeacherWorkspace({
                         {st.studentId || "-"}
                       </td>
                       <td className="sticky left-[115px] z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-bold text-[#16192C]">
-                        {st.lastName}, {st.firstName}
+                        {st.lastName}
+                      </td>
+                      <td className="sticky left-[240px] z-10 border-r border-[#C6B393] bg-white px-3 py-2 font-semibold text-[#16192C]">
+                        {st.firstName}
+                      </td>
+                      <td className="border-r border-[#EFE6D2] px-3 py-2 text-[#5E5246]">
+                        {st.middleName || "-"}
                       </td>
                       <td className="px-3 py-2 text-[#5E5246]">
                         {st.courseCode || "-"}
@@ -2457,7 +2474,9 @@ export function TeacherWorkspace({
               <thead>
                 <tr className="border-b-2 border-[#C6B393] bg-[#EFE6D2]">
                   <th className="px-3 py-2.5">Student ID</th>
-                  <th className="px-3 py-2.5">Full Name</th>
+                  <th className="px-3 py-2.5">Last Name</th>
+                  <th className="px-3 py-2.5">First Name</th>
+                  <th className="px-3 py-2.5">Middle Name</th>
                   <th className="px-3 py-2.5">Course</th>
                   <th className="px-3 py-2.5">APC Email</th>
                   <th className="px-3 py-2.5">Password State</th>
@@ -2469,7 +2488,13 @@ export function TeacherWorkspace({
                   <tr key={st.id} className="border-b border-[#EFE6D2]">
                     <td className="px-3 py-2 font-mono">{st.studentId || "-"}</td>
                     <td className="px-3 py-2 font-bold text-[#16192C]">
-                      {st.lastName}, {st.firstName} {st.middleName || ""}
+                      {st.lastName}
+                    </td>
+                    <td className="px-3 py-2 font-semibold text-[#16192C]">
+                      {st.firstName}
+                    </td>
+                    <td className="px-3 py-2 text-[#5E5246]">
+                      {st.middleName || "-"}
                     </td>
                     <td className="px-3 py-2">{st.courseCode || "-"}</td>
                     <td className="px-3 py-2 font-mono text-[11px]">{st.email}</td>
@@ -2510,47 +2535,81 @@ export function TeacherWorkspace({
         title="Add Student to Section"
       >
         <form onSubmit={handleCreateStudent} className="space-y-3">
-          <div className="grid gap-2.5 sm:grid-cols-2">
-            <input
-              required
-              placeholder="Student ID (e.g. 2024-140199)"
-              value={stuId}
-              onChange={(e) => setStuId(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
-            <input
-              placeholder="Course Code (e.g. BSIT)"
-              value={stuCourse}
-              onChange={(e) => setStuCourse(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
-            <input
-              required
-              placeholder="Last Name"
-              value={stuLast}
-              onChange={(e) => setStuLast(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
-            <input
-              required
-              placeholder="First Name"
-              value={stuFirst}
-              onChange={(e) => setStuFirst(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
-            <input
-              placeholder="Middle Name (optional)"
-              value={stuMiddle}
-              onChange={(e) => setStuMiddle(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
-            />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                Student ID
+              </label>
+              <input
+                required
+                placeholder="e.g. 2024-140101"
+                value={stuId}
+                onChange={(e) => setStuId(e.target.value)}
+                className="folio-input w-full px-3 py-2 font-mono text-xs"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                Course Code
+              </label>
+              <input
+                placeholder="e.g. BSIT / BSIT-MI"
+                value={stuCourse}
+                onChange={(e) => setStuCourse(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                Last Name
+              </label>
+              <input
+                required
+                placeholder="e.g. Alobin"
+                value={stuLast}
+                onChange={(e) => setStuLast(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                First Name
+              </label>
+              <input
+                required
+                placeholder="e.g. Vince Nelmar"
+                value={stuFirst}
+                onChange={(e) => setStuFirst(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                Middle Name
+              </label>
+              <input
+                placeholder="e.g. Pega"
+                value={stuMiddle}
+                onChange={(e) => setStuMiddle(e.target.value)}
+                className="folio-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+              APC Email (@student.apc.edu.ph)
+            </label>
             <input
               required
               type="email"
-              placeholder="APC Email (@student.apc.edu.ph)"
+              placeholder="vpalobin@student.apc.edu.ph"
               value={stuEmail}
               onChange={(e) => setStuEmail(e.target.value)}
-              className="folio-input px-3 py-2 text-xs"
+              className="folio-input w-full px-3 py-2 text-xs"
             />
           </div>
 
@@ -3136,7 +3195,7 @@ export function TeacherWorkspace({
                 />
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
                   Last Name
@@ -3159,16 +3218,16 @@ export function TeacherWorkspace({
                   className="folio-input w-full px-3 py-2 text-xs"
                 />
               </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                Middle Name (Optional)
-              </label>
-              <input
-                value={editStuMiddle}
-                onChange={(e) => setEditStuMiddle(e.target.value)}
-                className="folio-input w-full px-3 py-2 text-xs"
-              />
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                  Middle Name
+                </label>
+                <input
+                  value={editStuMiddle}
+                  onChange={(e) => setEditStuMiddle(e.target.value)}
+                  className="folio-input w-full px-3 py-2 text-xs"
+                />
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
