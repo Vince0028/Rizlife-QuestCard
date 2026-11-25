@@ -28,8 +28,8 @@ INSERT INTO "Section" (
   "updatedAt"
 ) VALUES (
   'sec_bsit_t2',
-  'BSIT',
-  'Life and Works of Rizal (BSIT)',
+  'BSIT241',
+  'Life and Works of Rizal (BSIT241)',
   'Term 2 AY 2026-2027',
   'usr_teacher_01',
   false,
@@ -38,8 +38,10 @@ INSERT INTO "Section" (
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
 )
-ON CONFLICT ("code", "term") DO UPDATE
-SET "teacherId" = EXCLUDED."teacherId",
+ON CONFLICT ("id") DO UPDATE
+SET "code" = EXCLUDED."code",
+    "name" = EXCLUDED."name",
+    "teacherId" = EXCLUDED."teacherId",
     "updatedAt" = CURRENT_TIMESTAMP;
 
 INSERT INTO "Enrollment" (
@@ -54,15 +56,15 @@ SELECT
   s."id",
   CURRENT_TIMESTAMP
 FROM "User" u
-JOIN "Section" s ON s."code" = 'BSIT' AND s."term" = 'Term 2 AY 2026-2027'
+JOIN "Section" s ON s."id" = 'sec_bsit_t2'
 WHERE u."email" = 'vpalobin@student.apc.edu.ph'
 ON CONFLICT ("studentId", "sectionId") DO NOTHING;
 
--- 2. Insert / Update the 24 Quest Card Tasks for Section BSIT
+-- 2. Insert / Update the 24 Quest Card Tasks for Section BSIT241
 WITH bsit_section AS (
   SELECT "id" AS section_id
   FROM "Section"
-  WHERE "code" = 'BSIT' AND "term" = 'Term 2 AY 2026-2027'
+  WHERE "id" = 'sec_bsit_t2'
   LIMIT 1
 ),
 task_data (task_number, quest_id, title, category, description, openlearning_url) AS (
@@ -181,7 +183,7 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
 
--- 4. Verify the 24 tasks in Section BSIT
+-- 4. Verify the 24 tasks in Section BSIT241
 SELECT
   q."taskNumber",
   q."title",
@@ -189,5 +191,5 @@ SELECT
   s."code" AS "sectionCode"
 FROM "Quest" q
 JOIN "Section" s ON s."id" = q."sectionId"
-WHERE s."code" = 'BSIT'
+WHERE s."code" = 'BSIT241'
 ORDER BY q."taskNumber" ASC;

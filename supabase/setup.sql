@@ -279,7 +279,7 @@ SET
   "courseCode" = EXCLUDED."courseCode",
   "updatedAt" = CURRENT_TIMESTAMP;
 
--- 7. Section BSIT assigned to the First Teacher (tasks left empty for testing)
+-- 7. Section BSIT241 assigned to the First Teacher (tasks left empty for testing)
 INSERT INTO "Section" (
   "id",
   "code",
@@ -293,8 +293,8 @@ INSERT INTO "Section" (
   "updatedAt"
 ) VALUES (
   'sec_bsit_t2',
-  'BSIT',
-  'Life and Works of Rizal (BSIT)',
+  'BSIT241',
+  'Life and Works of Rizal (BSIT241)',
   'Term 2 AY 2026-2027',
   'usr_teacher_01',
   false,
@@ -305,7 +305,7 @@ INSERT INTO "Section" (
 )
 ON CONFLICT ("code", "term") DO NOTHING;
 
--- 8. Enroll Vince Alobin (vpalobin@student.apc.edu.ph) into Section BSIT
+-- 8. Enroll Vince Alobin (vpalobin@student.apc.edu.ph) into Section BSIT241
 INSERT INTO "Enrollment" (
   "id",
   "studentId",
@@ -318,7 +318,7 @@ SELECT
   s."id",
   CURRENT_TIMESTAMP
 FROM "User" u
-JOIN "Section" s ON s."code" = 'BSIT' AND s."term" = 'Term 2 AY 2026-2027'
+JOIN "Section" s ON s."code" = 'BSIT241' AND s."term" = 'Term 2 AY 2026-2027'
 WHERE u."email" = 'vpalobin@student.apc.edu.ph'
 ON CONFLICT ("studentId", "sectionId") DO NOTHING;
 
