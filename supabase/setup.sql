@@ -243,9 +243,9 @@ INSERT INTO "User" (
 (
   'usr_teacher_01',
   NULL,
-  'Elena',
-  NULL,
-  'Mendoza',
+  'April Anne',
+  'G.',
+  'Tuburan',
   'teacher@apc.edu.ph',
   '$2b$10$k2ee53CavLcz6KlRu2kug.9Tvcq7lXcHjJNr0L05IZGBvNabEj9Lu',
   'TEACHER',
