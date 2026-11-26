@@ -131,7 +131,12 @@ export async function getSectionWorkspaceData(
       }),
     ]);
 
-  const students = enrollments.map((e) => e.student);
+  const students = enrollments.map((e) => ({
+    ...e.student,
+    finalsTrack: e.finalsTrack,
+    assignedModuleTitle: e.assignedModuleTitle,
+    assignedModuleUrl: e.assignedModuleUrl,
+  }));
   const leaderboard = computeLeaderboard(
     students.map((s) => ({
       id: s.id,
@@ -899,6 +904,46 @@ export async function updateManagedStudent(params: {
   });
 
   return { student: updated };
+}
+
+export async function updateEnrollmentTrack(params: {
+  sectionId: string;
+  studentIds: string[];
+  finalsTrack: "UNDECIDED" | "SYSTEM" | "OPENLEARNING_MODULE";
+  assignedModuleTitle?: string | null;
+  assignedModuleUrl?: string | null;
+  user: SessionPayload;
+}) {
+  await assertSectionAccess(params.sectionId, params.user);
+
+  const title =
+    params.finalsTrack === "OPENLEARNING_MODULE"
+      ? params.assignedModuleTitle?.trim() || null
+      : null;
+  const url =
+    params.finalsTrack === "OPENLEARNING_MODULE"
+      ? params.assignedModuleUrl?.trim() || null
+      : null;
+
+  await prisma.enrollment.updateMany({
+    where: {
+      sectionId: params.sectionId,
+      studentId: { in: params.studentIds },
+    },
+    data: {
+      finalsTrack: params.finalsTrack,
+      assignedModuleTitle: title,
+      assignedModuleUrl: url,
+    },
+  });
+
+  return {
+    success: true,
+    count: params.studentIds.length,
+    finalsTrack: params.finalsTrack,
+    assignedModuleTitle: title,
+    assignedModuleUrl: url,
+  };
 }
 
 export async function exportSectionTrackerFile(params: {
