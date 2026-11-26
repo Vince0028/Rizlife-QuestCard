@@ -1,5 +1,9 @@
+// Must stay first: points the DB client at a throwaway local JSON file.
+import { cleanupTestDb } from "./test-env";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
+import { runSubmissionLifecycleChecks } from "./submission-lifecycle";
+import { runMicrosoftSsoChecks } from "./sso-callback";
 import { signSessionToken, verifySessionToken } from "../auth";
 import { hashPassword, verifyPassword } from "../password";
 import { createSectionSchema, validateSubmissionUrl } from "../validation";
@@ -239,10 +243,18 @@ async function run() {
   assert.equal(parsedImport.rows[0].firstName, "Vince Nelmar");
   assert.equal(parsedImport.rows[0].middleName, "Pega");
 
+  // 8. Submission lifecycle (resubmit after revision, stamped lock) + threshold digest
+  await runSubmissionLifecycleChecks();
+
+  // 9. Microsoft Entra ID SSO callback: state/PKCE, tenant, APC domain, linking, portal roles
+  await runMicrosoftSsoChecks();
+
   console.log("ALL CORE VERIFICATION CHECKS PASSED!");
 }
 
-run().catch((err) => {
-  console.error("Verification failed:", err);
-  process.exit(1);
-});
+run()
+  .catch((err) => {
+    console.error("Verification failed:", err);
+    process.exitCode = 1;
+  })
+  .finally(cleanupTestDb);

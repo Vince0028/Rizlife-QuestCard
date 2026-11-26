@@ -303,7 +303,14 @@ INSERT INTO "Section" (
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
 )
-ON CONFLICT ("code", "term") DO NOTHING;
+-- Conflict on "id" (not "code","term"): databases seeded by older versions of this
+-- script already have 'sec_bsit_t2' with code 'BSIT', which would otherwise raise a
+-- primary-key violation and abort the whole script on re-run.
+ON CONFLICT ("id") DO UPDATE
+SET
+  "code" = EXCLUDED."code",
+  "name" = EXCLUDED."name",
+  "updatedAt" = CURRENT_TIMESTAMP;
 
 -- 8. Enroll Vince Alobin (vpalobin@student.apc.edu.ph) into Section BSIT241
 INSERT INTO "Enrollment" (

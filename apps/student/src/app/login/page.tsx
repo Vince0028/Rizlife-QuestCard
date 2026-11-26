@@ -17,6 +17,14 @@ export default async function StudentLoginPage({
     sso_account_not_provisioned:
       "Your Microsoft account is not yet enrolled in RizLife QuestCard. Ask your instructor to add your roster email.",
     sso_failed: "Microsoft sign-in could not be completed. Please try again.",
+    sso_cancelled: "Microsoft sign-in was cancelled.",
+    sso_missing_code: "Microsoft did not return a sign-in code. Please try again.",
+    sso_state_mismatch:
+      "Your Microsoft sign-in expired or was started in another tab. Please try again.",
+    sso_domain_not_allowed:
+      "Use your APC Microsoft account (@student.apc.edu.ph).",
+    sso_account_conflict:
+      "This RizLife account is linked to a different Microsoft account. Ask your instructor or the RizLife administrator for help.",
   };
 
   return (
@@ -27,7 +35,11 @@ export default async function StudentLoginPage({
       defaultDemoEmail="vpalobin@student.apc.edu.ph"
       defaultDemoPassword="Student@2026"
       microsoftSsoConfigured={isMicrosoftSsoConfigured()}
-      initialError={params.error ? errorMap[params.error] || params.error : null}
+      initialError={
+        params.error
+          ? errorMap[params.error] ?? "Sign-in could not be completed. Please try again."
+          : null
+      }
     />
   );
 }

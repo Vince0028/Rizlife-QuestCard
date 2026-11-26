@@ -9,6 +9,7 @@ import {
 } from "./auth";
 import {
   buildMicrosoftAuthUrl,
+  createMicrosoftSsoAttempt,
   exchangeMicrosoftCode,
   isMicrosoftSsoConfigured,
 } from "./microsoft-sso";
@@ -176,10 +177,59 @@ export async function performChangePassword(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Microsoft Entra ID SSO
+// ---------------------------------------------------------------------------
+
+const SSO_COOKIE_PATH = "/api/auth/microsoft";
+
+/** Per-portal cookie holding `state` + PKCE verifier between login and callback. */
+export const MICROSOFT_SSO_STATE_COOKIES: Record<PortalKey, string> = {
+  student: "rizlife_student_sso_state",
+  teacher: "rizlife_teacher_sso_state",
+  admin: "rizlife_admin_sso_state",
+};
+
+export interface SsoCookie {
+  name: string;
+  value: string;
+  options: {
+    httpOnly: true;
+    sameSite: "lax"; // must survive the top-level redirect back from login.microsoftonline.com
+    secure: boolean;
+    path: string;
+    maxAge: number;
+  };
+}
+
+function ssoStateCookie(portal: PortalKey, value: string, maxAge: number): SsoCookie {
+  return {
+    name: MICROSOFT_SSO_STATE_COOKIES[portal],
+    value,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: SSO_COOKIE_PATH,
+      maxAge,
+    },
+  };
+}
+
+function callbackUri(origin: string) {
+  return `${origin.replace(/\/$/, "")}/api/auth/microsoft/callback`;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+
 export function getMicrosoftLoginRedirectUrl(
   origin: string,
   portal: PortalKey
-): { ok: boolean; url?: string; error?: string } {
+): { ok: boolean; url?: string; error?: string; stateCookie?: SsoCookie } {
   if (!isMicrosoftSsoConfigured()) {
     return {
       ok: false,
@@ -187,14 +237,39 @@ export function getMicrosoftLoginRedirectUrl(
     };
   }
 
-  const redirectUri = `${origin.replace(/\/$/, "")}/api/auth/microsoft/callback`;
-  const state = crypto.randomBytes(16).toString("hex");
-  const url = buildMicrosoftAuthUrl({ redirectUri, state, portal });
-  return { ok: true, url };
+  const attempt = createMicrosoftSsoAttempt(portal);
+  const url = buildMicrosoftAuthUrl({
+    redirectUri: callbackUri(origin),
+    state: attempt.state,
+    codeChallenge: attempt.codeChallenge,
+  });
+  return {
+    ok: true,
+    url,
+    stateCookie: ssoStateCookie(portal, `${attempt.state}|${attempt.codeVerifier}`, 600),
+  };
+}
+
+function emailDomainAllowed(
+  email: string,
+  settings: { allowedStudentDomain: string; allowedStaffDomain: string } | null
+): boolean {
+  const domain = email.split("@")[1]?.toLowerCase();
+  if (!domain) return false;
+  const allowed = [
+    settings?.allowedStudentDomain ?? "student.apc.edu.ph",
+    settings?.allowedStaffDomain ?? "apc.edu.ph",
+  ].map((d) => d.trim().toLowerCase().replace(/^@/, ""));
+  return allowed.includes(domain); // exact match: "student.apc.edu.ph" must not satisfy "apc.edu.ph" by suffix
 }
 
 export async function performMicrosoftCallback(params: {
   code: string | null;
+  state: string | null;
+  /** `error` query param Microsoft sends when sign-in is cancelled or refused. */
+  providerError?: string | null;
+  /** Value of MICROSOFT_SSO_STATE_COOKIES[portal] from the request. */
+  stateCookieValue: string | undefined;
   origin: string;
   portal: PortalKey;
 }): Promise<{
@@ -202,46 +277,67 @@ export async function performMicrosoftCallback(params: {
   tokenToSet?: string;
   redirectPath: string;
   cookieName: string;
+  /** Always clear this cookie on the response: each state is single-use. */
+  clearStateCookie: SsoCookie;
 }> {
   const cookieName = PORTAL_COOKIES[params.portal];
-  if (!params.code) {
-    return {
-      ok: false,
-      redirectPath: "/login?error=sso_missing_code",
-      cookieName,
-    };
+  const clearStateCookie = ssoStateCookie(params.portal, "", 0);
+  const fail = (error: string) => ({
+    ok: false,
+    redirectPath: `/login?error=${error}`,
+    cookieName,
+    clearStateCookie,
+  });
+
+  if (params.providerError) {
+    return fail(params.providerError === "access_denied" ? "sso_cancelled" : "sso_failed");
+  }
+  if (!params.code) return fail("sso_missing_code");
+
+  // CSRF / login-fixation protection: the state must match the one this browser started.
+  const [expectedState, codeVerifier] = (params.stateCookieValue ?? "").split("|");
+  if (
+    !expectedState ||
+    !codeVerifier ||
+    !params.state ||
+    !expectedState.startsWith(`${params.portal}:`) ||
+    !safeEqual(params.state, expectedState)
+  ) {
+    return fail("sso_state_mismatch");
   }
 
   try {
-    const redirectUri = `${params.origin.replace(
-      /\/$/,
-      ""
-    )}/api/auth/microsoft/callback`;
     const profile = await exchangeMicrosoftCode({
       code: params.code,
-      redirectUri,
+      redirectUri: callbackUri(params.origin),
+      codeVerifier,
     });
 
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [{ microsoftOid: profile.oid }, { email: profile.email }],
-      },
-    });
-
-    if (!user || !user.isActive) {
-      return {
-        ok: false,
-        redirectPath: "/login?error=sso_account_not_provisioned",
-        cookieName,
-      };
+    const settings = await prisma.systemSetting.findUnique({ where: { id: "global" } });
+    if (!emailDomainAllowed(profile.email, settings)) {
+      console.warn(`[Microsoft SSO] Rejected non-APC email domain for ${profile.email}.`);
+      return fail("sso_domain_not_allowed");
     }
 
+    // 1) An already-linked Microsoft identity wins. 2) Otherwise link by APC email.
+    let user = await prisma.user.findUnique({ where: { microsoftOid: profile.oid } });
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: { email: { equals: profile.email, mode: "insensitive" } },
+      });
+      if (user?.microsoftOid && user.microsoftOid !== profile.oid) {
+        // The account is bound to a different Microsoft identity with the same email.
+        console.warn(
+          `[Microsoft SSO] ${profile.email} is linked to another Microsoft account; refusing to sign in.`
+        );
+        return fail("sso_account_conflict");
+      }
+    }
+
+    if (!user || !user.isActive) return fail("sso_account_not_provisioned");
+
     if (!PORTAL_ALLOWED_ROLES[params.portal].includes(user.role as RoleValue)) {
-      return {
-        ok: false,
-        redirectPath: "/login?error=unauthorized",
-        cookieName,
-      };
+      return fail("unauthorized");
     }
 
     if (!user.microsoftOid) {
@@ -260,6 +356,7 @@ export async function performMicrosoftCallback(params: {
       lastName: user.lastName,
       studentId: user.studentId,
       courseCode: user.courseCode,
+      // Entra ID authenticated the user, so a pending temporary password does not gate SSO.
       mustChangePassword: false,
       portal: params.portal,
     });
@@ -269,13 +366,10 @@ export async function performMicrosoftCallback(params: {
       tokenToSet: token,
       redirectPath: "/dashboard",
       cookieName,
+      clearStateCookie,
     };
   } catch (err) {
     console.error("[Microsoft SSO Callback Error]:", err);
-    return {
-      ok: false,
-      redirectPath: "/login?error=sso_failed",
-      cookieName,
-    };
+    return fail("sso_failed");
   }
 }

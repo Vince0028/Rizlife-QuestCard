@@ -1,6 +1,10 @@
 import { prisma } from "./db";
 import { computeLeaderboard } from "./leaderboard";
-import { getSectionDigestQueue, sendSectionDigest } from "./digest";
+import {
+  getSectionDigestQueue,
+  maybeTriggerThresholdDigest,
+  sendSectionDigest,
+} from "./digest";
 import { generateDefaultPassword, hashPassword } from "./password";
 import {
   generateTrackerCsv,
@@ -12,6 +16,7 @@ import {
   createStudentSchema,
   questPayloadSchema,
   reviewSubmissionSchema,
+  submitQuestSchema,
   updateSectionSettingsSchema,
   updateStudentSchema,
   validateSubmissionUrl,
@@ -571,6 +576,107 @@ export async function reviewOrStampSubmission(
     });
   }
   return null;
+}
+
+/**
+ * Student submit / resubmit (POST /api/submissions on the student portal).
+ * - firstSubmittedAt is locked on the first submission and preserved on resubmits
+ *   (speed-leaderboard fairness).
+ * - includedInDigest resets to false so the resubmission is picked up by the next digest.
+ * - STAMPED submissions are final (409).
+ * Throws errors carrying `status` (see toWorkspaceError).
+ */
+export async function submitStudentQuest(params: {
+  studentUserId: string;
+  rawBody: unknown;
+}) {
+  const parsed = submitQuestSchema.safeParse(params.rawBody);
+  if (!parsed.success) {
+    throw Object.assign(
+      new Error(parsed.error.issues[0]?.message || "Invalid submission data."),
+      { status: 400 }
+    );
+  }
+
+  const urlCheck = validateSubmissionUrl(parsed.data.submissionUrl);
+  if (!urlCheck.valid || !urlCheck.normalizedUrl) {
+    throw Object.assign(new Error(urlCheck.error || "Please enter a valid URL."), {
+      status: 400,
+    });
+  }
+
+  const quest = await prisma.quest.findUnique({
+    where: { id: parsed.data.questId },
+  });
+  if (!quest) {
+    throw Object.assign(new Error("Quest not found."), { status: 404 });
+  }
+
+  const enrollment = await prisma.enrollment.findUnique({
+    where: {
+      studentId_sectionId: {
+        studentId: params.studentUserId,
+        sectionId: quest.sectionId,
+      },
+    },
+  });
+  if (!enrollment) {
+    throw Object.assign(
+      new Error("You are not enrolled in this quest's section."),
+      { status: 403 }
+    );
+  }
+
+  const existing = await prisma.submission.findUnique({
+    where: {
+      questId_studentId: {
+        questId: quest.id,
+        studentId: params.studentUserId,
+      },
+    },
+  });
+
+  if (existing?.status === "STAMPED") {
+    throw Object.assign(
+      new Error(
+        "This quest has already been stamped and verified by your instructor."
+      ),
+      { status: 409 }
+    );
+  }
+
+  const now = new Date();
+  const studentNote = parsed.data.studentNote?.trim() || null;
+  const submission = await prisma.submission.upsert({
+    where: {
+      questId_studentId: {
+        questId: quest.id,
+        studentId: params.studentUserId,
+      },
+    },
+    update: {
+      submissionUrl: urlCheck.normalizedUrl,
+      studentNote,
+      status: "PENDING_REVIEW",
+      firstSubmittedAt: existing?.firstSubmittedAt ?? now,
+      submittedAt: now,
+      includedInDigest: false,
+    },
+    create: {
+      questId: quest.id,
+      studentId: params.studentUserId,
+      submissionUrl: urlCheck.normalizedUrl,
+      studentNote,
+      status: "PENDING_REVIEW",
+      firstSubmittedAt: now,
+      submittedAt: now,
+      includedInDigest: false,
+    },
+  });
+
+  await maybeTriggerThresholdDigest(quest.sectionId);
+
+  return { urlCheck, submission };
 }
 
 export async function createOrEnrollStudent(
