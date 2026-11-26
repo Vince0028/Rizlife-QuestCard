@@ -31,8 +31,11 @@ import {
   Users,
 } from "lucide-react";
 import {
+  FINALS_TRACK_LABELS,
+  PRESET_OPENLEARNING_MODULES,
   QUEST_CATEGORY_LABELS,
   type DigestQueueSummary,
+  type FinalsTrackValue,
   type LeaderboardEntry,
   type QuestCategoryValue,
   type SubmissionStatusValue,
@@ -80,6 +83,9 @@ export interface WorkspaceStudentItem {
   courseCode: string | null;
   mustChangePassword: boolean;
   isActive: boolean;
+  finalsTrack?: FinalsTrackValue;
+  assignedModuleTitle?: string | null;
+  assignedModuleUrl?: string | null;
 }
 
 export interface WorkspaceSubmissionItem {
@@ -363,6 +369,29 @@ export function TeacherWorkspace({
   const [editStuMiddle, setEditStuMiddle] = useState("");
   const [editStuCourse, setEditStuCourse] = useState("");
   const [editStuEmail, setEditStuEmail] = useState("");
+  const [editStuFinalsTrack, setEditStuFinalsTrack] =
+    useState<FinalsTrackValue>("UNDECIDED");
+  const [editStuPresetModule, setEditStuPresetModule] = useState("");
+  const [editStuModuleTitle, setEditStuModuleTitle] = useState("");
+  const [editStuModuleUrl, setEditStuModuleUrl] = useState("");
+
+  // Batch Track Assignment Modal
+  const [showBatchAssignModal, setShowBatchAssignModal] = useState(false);
+  const [selectedStudentIdsForTrack, setSelectedStudentIdsForTrack] = useState<
+    string[]
+  >([]);
+  const [batchFinalsTrack, setBatchFinalsTrack] =
+    useState<FinalsTrackValue>("OPENLEARNING_MODULE");
+  const [batchPresetModule, setBatchPresetModule] = useState(
+    PRESET_OPENLEARNING_MODULES[0]?.id || ""
+  );
+  const [batchModuleTitle, setBatchModuleTitle] = useState(
+    PRESET_OPENLEARNING_MODULES[0]?.title || ""
+  );
+  const [batchModuleUrl, setBatchModuleUrl] = useState(
+    PRESET_OPENLEARNING_MODULES[0]?.url || ""
+  );
+  const [batchAssignBusy, setBatchAssignBusy] = useState(false);
 
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -1269,7 +1298,46 @@ export function TeacherWorkspace({
     setEditStuMiddle(st.middleName || "");
     setEditStuCourse(st.courseCode || "");
     setEditStuEmail(st.email);
-    setResetNewPass("Student@2026");
+    setEditStuFinalsTrack(st.finalsTrack || "UNDECIDED");
+    setEditStuModuleTitle(st.assignedModuleTitle || "");
+    setEditStuModuleUrl(st.assignedModuleUrl || "");
+    const matchingPreset = PRESET_OPENLEARNING_MODULES.find(
+      (m) => m.title === st.assignedModuleTitle || m.url === st.assignedModuleUrl
+    );
+    setEditStuPresetModule(matchingPreset ? matchingPreset.id : "custom");
+  }
+
+  async function handleSaveTrackAssignment(
+    studentIds: string[],
+    finalsTrack: FinalsTrackValue,
+    moduleTitle: string,
+    moduleUrl: string
+  ) {
+    if (!selectedSectionId) return false;
+    const res = await fetch(`${apiBase}/students/assign-track`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sectionId: selectedSectionId,
+        studentIds,
+        finalsTrack,
+        assignedModuleTitle:
+          finalsTrack === "OPENLEARNING_MODULE" ? moduleTitle : null,
+        assignedModuleUrl:
+          finalsTrack === "OPENLEARNING_MODULE" ? moduleUrl : null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast("err", data.error || "Failed to update track assignment.");
+      return false;
+    }
+    showToast(
+      "ok",
+      `Assigned ${studentIds.length} student(s) to ${FINALS_TRACK_LABELS[finalsTrack]}.`
+    );
+    await loadWorkspace(selectedSectionId);
+    return true;
   }
 
   function requestSaveStudentEdit(e: React.FormEvent) {
@@ -1299,6 +1367,17 @@ export function TeacherWorkspace({
           showToast("err", data.error || "Could not update student details.");
           return;
         }
+
+        // Also update Finals Track if inside a section
+        if (selectedSectionId && editStudentTarget) {
+          await handleSaveTrackAssignment(
+            [editStudentTarget.id],
+            editStuFinalsTrack,
+            editStuModuleTitle,
+            editStuModuleUrl
+          );
+        }
+
         setEditStudentTarget(null);
         await loadWorkspace(selectedSectionId);
         showToast("ok", `Updated student profile for ${editStuEmail}.`);
@@ -2450,6 +2529,30 @@ export function TeacherWorkspace({
               <button
                 type="button"
                 onClick={() => {
+                  setSelectedStudentIdsForTrack(
+                    selectedStudentIdsForTrack.length === workspace.students.length
+                      ? []
+                      : workspace.students.map((s) => s.id)
+                  );
+                }}
+                className="btn-heritage-paper px-3 py-1.5 text-xs"
+              >
+                {selectedStudentIdsForTrack.length === workspace.students.length
+                  ? "Deselect All"
+                  : "Select All"}
+              </button>
+              {selectedStudentIdsForTrack.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowBatchAssignModal(true)}
+                  className="btn-heritage-primary px-3.5 py-1.5 text-xs animate-pulse font-bold"
+                >
+                  Assign Track / Module ({selectedStudentIdsForTrack.length})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
                   setImportReport(null);
                   setShowUploadStudentsModal(true);
                 }}
@@ -2473,19 +2576,52 @@ export function TeacherWorkspace({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b-2 border-[#C6B393] bg-[#EFE6D2]">
+                  <th className="px-3 py-2.5 w-8">
+                    <input
+                      type="checkbox"
+                      checked={
+                        workspace.students.length > 0 &&
+                        selectedStudentIdsForTrack.length === workspace.students.length
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedStudentIdsForTrack(workspace.students.map((s) => s.id));
+                        } else {
+                          setSelectedStudentIdsForTrack([]);
+                        }
+                      }}
+                      className="rounded border-[#C6B393] text-[#8A6923] focus:ring-[#8A6923]"
+                    />
+                  </th>
                   <th className="px-3 py-2.5">Student ID</th>
                   <th className="px-3 py-2.5">Last Name</th>
                   <th className="px-3 py-2.5">First Name</th>
-                  <th className="px-3 py-2.5">Middle Name</th>
                   <th className="px-3 py-2.5">Course</th>
                   <th className="px-3 py-2.5">APC Email</th>
+                  <th className="px-3 py-2.5">Finals Track / Module</th>
                   <th className="px-3 py-2.5">Password State</th>
                   <th className="px-3 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {workspace.students.map((st) => (
-                  <tr key={st.id} className="border-b border-[#EFE6D2]">
+                  <tr key={st.id} className="border-b border-[#EFE6D2] hover:bg-[#FDFBF7]">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentIdsForTrack.includes(st.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedStudentIdsForTrack([...selectedStudentIdsForTrack, st.id]);
+                          } else {
+                            setSelectedStudentIdsForTrack(
+                              selectedStudentIdsForTrack.filter((id) => id !== st.id)
+                            );
+                          }
+                        }}
+                        className="rounded border-[#C6B393] text-[#8A6923] focus:ring-[#8A6923]"
+                      />
+                    </td>
                     <td className="px-3 py-2 font-mono">{st.studentId || "-"}</td>
                     <td className="px-3 py-2 font-bold text-[#16192C]">
                       {st.lastName}
@@ -2493,11 +2629,30 @@ export function TeacherWorkspace({
                     <td className="px-3 py-2 font-semibold text-[#16192C]">
                       {st.firstName}
                     </td>
-                    <td className="px-3 py-2 text-[#5E5246]">
-                      {st.middleName || "-"}
-                    </td>
                     <td className="px-3 py-2">{st.courseCode || "-"}</td>
                     <td className="px-3 py-2 font-mono text-[11px]">{st.email}</td>
+                    <td className="px-3 py-2">
+                      {st.finalsTrack === "SYSTEM" ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-[#E0E7FF] px-2 py-0.5 font-sans text-[11px] font-semibold text-[#3730A3] border border-[#C7D2FE]">
+                          💻 Creating System
+                        </span>
+                      ) : st.finalsTrack === "OPENLEARNING_MODULE" ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 rounded bg-[#FEF3C7] px-2 py-0.5 font-sans text-[11px] font-semibold text-[#92400E] border border-[#FDE68A]">
+                            📖 OpenLearning Module
+                          </span>
+                          {st.assignedModuleTitle && (
+                            <span className="font-mono text-[10px] text-[#5E5246] truncate max-w-[200px]" title={st.assignedModuleTitle}>
+                              {st.assignedModuleTitle}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center rounded bg-[#F3F4F6] px-2 py-0.5 font-sans text-[11px] text-[#6B7280] border border-[#E5E7EB]">
+                          ⏳ Undecided
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       {st.mustChangePassword ? (
                         <span className="border border-[#D4AB50] bg-[#FEF3C7] px-2 py-0.5 font-mono text-[10px] font-bold text-[#78350F]">
@@ -3241,6 +3396,91 @@ export function TeacherWorkspace({
                 className="folio-input w-full px-3 py-2 text-xs"
               />
             </div>
+
+            {/* FINALS TRACK CONFIGURATION */}
+            <div className="rounded border border-[#D4AB50] bg-[#FFFBEB] p-3 space-y-2.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#92400E]">
+                Finals Capstone Track Assignment
+              </label>
+              <div>
+                <select
+                  value={editStuFinalsTrack}
+                  onChange={(e) => {
+                    const val = e.target.value as FinalsTrackValue;
+                    setEditStuFinalsTrack(val);
+                    if (val === "OPENLEARNING_MODULE" && !editStuModuleTitle) {
+                      const first = PRESET_OPENLEARNING_MODULES[0];
+                      if (first) {
+                        setEditStuPresetModule(first.id);
+                        setEditStuModuleTitle(first.title);
+                        setEditStuModuleUrl(first.url);
+                      }
+                    }
+                  }}
+                  className="folio-input w-full px-3 py-2 text-xs font-semibold"
+                >
+                  <option value="UNDECIDED">⏳ Undecided / Pending Selection</option>
+                  <option value="SYSTEM">💻 Creating a System (Software/App Track)</option>
+                  <option value="OPENLEARNING_MODULE">📖 OpenLearning Module Track</option>
+                </select>
+              </div>
+
+              {editStuFinalsTrack === "OPENLEARNING_MODULE" && (
+                <div className="space-y-2 border-t border-[#FDE68A] pt-2">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#92400E]">
+                      Select Preset Module
+                    </label>
+                    <select
+                      value={editStuPresetModule}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditStuPresetModule(val);
+                        const match = PRESET_OPENLEARNING_MODULES.find((m) => m.id === val);
+                        if (match) {
+                          setEditStuModuleTitle(match.title);
+                          setEditStuModuleUrl(match.url);
+                        }
+                      }}
+                      className="folio-input w-full px-2.5 py-1.5 text-xs"
+                    >
+                      {PRESET_OPENLEARNING_MODULES.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.title}
+                        </option>
+                      ))}
+                      <option value="custom">-- Custom / Other Module --</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#92400E]">
+                      Module Title / Name
+                    </label>
+                    <input
+                      required={editStuFinalsTrack === "OPENLEARNING_MODULE"}
+                      placeholder="e.g. JOSE Gamified App & Mastery Quizzes"
+                      value={editStuModuleTitle}
+                      onChange={(e) => setEditStuModuleTitle(e.target.value)}
+                      className="folio-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#92400E]">
+                      Direct OpenLearning URL (Optional)
+                    </label>
+                    <input
+                      placeholder="https://www.openlearning.com/apc/courses/rizlife/..."
+                      value={editStuModuleUrl}
+                      onChange={(e) => setEditStuModuleUrl(e.target.value)}
+                      className="folio-input w-full px-3 py-2 font-mono text-[11px]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button type="submit" className="btn-heritage-primary w-full py-2.5 text-sm">
               Save Student Changes
             </button>
@@ -3279,6 +3519,134 @@ export function TeacherWorkspace({
             </div>
           </form>
         )}
+      </ModalDrawer>
+
+      {/* BATCH ASSIGN FINALS TRACK MODAL */}
+      <ModalDrawer
+        open={showBatchAssignModal}
+        onClose={() => setShowBatchAssignModal(false)}
+        title="Assign Finals Track / OpenLearning Module"
+        subtitle={`${selectedStudentIdsForTrack.length} student(s) selected in ${workspace?.section.code}`}
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBatchAssignBusy(true);
+            try {
+              const ok = await handleSaveTrackAssignment(
+                selectedStudentIdsForTrack,
+                batchFinalsTrack,
+                batchModuleTitle,
+                batchModuleUrl
+              );
+              if (ok) {
+                setShowBatchAssignModal(false);
+                setSelectedStudentIdsForTrack([]);
+              }
+            } finally {
+              setBatchAssignBusy(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+              Finals Track Option
+            </label>
+            <select
+              value={batchFinalsTrack}
+              onChange={(e) => {
+                const val = e.target.value as FinalsTrackValue;
+                setBatchFinalsTrack(val);
+                if (val === "OPENLEARNING_MODULE" && !batchModuleTitle) {
+                  const first = PRESET_OPENLEARNING_MODULES[0];
+                  if (first) {
+                    setBatchPresetModule(first.id);
+                    setBatchModuleTitle(first.title);
+                    setBatchModuleUrl(first.url);
+                  }
+                }
+              }}
+              className="folio-input w-full px-3 py-2 text-sm font-semibold"
+            >
+              <option value="OPENLEARNING_MODULE">📖 OpenLearning Module Track</option>
+              <option value="SYSTEM">💻 Creating a System (Software/App Track)</option>
+              <option value="UNDECIDED">⏳ Reset to Undecided / Pending Selection</option>
+            </select>
+          </div>
+
+          {batchFinalsTrack === "OPENLEARNING_MODULE" && (
+            <div className="rounded border border-[#D4AB50] bg-[#FFFBEB] p-3 space-y-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#92400E]">
+                  Choose Preset Module
+                </label>
+                <select
+                  value={batchPresetModule}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBatchPresetModule(val);
+                    const match = PRESET_OPENLEARNING_MODULES.find((m) => m.id === val);
+                    if (match) {
+                      setBatchModuleTitle(match.title);
+                      setBatchModuleUrl(match.url);
+                    }
+                  }}
+                  className="folio-input w-full px-2.5 py-1.5 text-xs"
+                >
+                  {PRESET_OPENLEARNING_MODULES.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title}
+                    </option>
+                  ))}
+                  <option value="custom">-- Custom / Other Module --</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#92400E]">
+                  Module Title / Name
+                </label>
+                <input
+                  required
+                  placeholder="e.g. JOSE Gamified App & Mastery Quizzes"
+                  value={batchModuleTitle}
+                  onChange={(e) => setBatchModuleTitle(e.target.value)}
+                  className="folio-input w-full px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#92400E]">
+                  Direct OpenLearning URL (Optional)
+                </label>
+                <input
+                  placeholder="https://www.openlearning.com/apc/courses/rizlife/..."
+                  value={batchModuleUrl}
+                  onChange={(e) => setBatchModuleUrl(e.target.value)}
+                  className="folio-input w-full px-3 py-2 font-mono text-[11px]"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowBatchAssignModal(false)}
+              className="btn-heritage-paper flex-1 py-2 text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={batchAssignBusy}
+              className="btn-heritage-primary flex-1 py-2 text-xs font-bold"
+            >
+              {batchAssignBusy ? "Saving..." : `Apply to ${selectedStudentIdsForTrack.length} Student(s)`}
+            </button>
+          </div>
+        </form>
       </ModalDrawer>
 
       <ConfirmDialog
