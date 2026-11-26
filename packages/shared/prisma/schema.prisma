@@ -28,6 +28,12 @@ enum SubmissionStatus {
   NEEDS_REVISION
 }
 
+enum FinalsTrack {
+  UNDECIDED
+  SYSTEM
+  OPENLEARNING_MODULE
+}
+
 model User {
   id                 String   @id @default(cuid())
   studentId          String?  @unique
@@ -74,10 +80,13 @@ model Section {
 }
 
 model Enrollment {
-  id         String   @id @default(cuid())
-  studentId  String
-  sectionId  String
-  enrolledAt DateTime @default(now())
+  id                  String      @id @default(cuid())
+  studentId           String
+  sectionId           String
+  finalsTrack         FinalsTrack @default(UNDECIDED)
+  assignedModuleTitle String?
+  assignedModuleUrl   String?
+  enrolledAt          DateTime    @default(now())
 
   student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
   section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)

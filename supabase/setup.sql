@@ -25,6 +25,12 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$ BEGIN
+  CREATE TYPE "FinalsTrack" AS ENUM ('UNDECIDED', 'SYSTEM', 'OPENLEARNING_MODULE');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 -- 2. Tables
 CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
@@ -63,6 +69,9 @@ CREATE TABLE IF NOT EXISTS "Enrollment" (
     "id" TEXT NOT NULL,
     "studentId" TEXT NOT NULL,
     "sectionId" TEXT NOT NULL,
+    "finalsTrack" "FinalsTrack" NOT NULL DEFAULT 'UNDECIDED',
+    "assignedModuleTitle" TEXT,
+    "assignedModuleUrl" TEXT,
     "enrolledAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Enrollment_pkey" PRIMARY KEY ("id")
 );

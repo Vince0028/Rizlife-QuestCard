@@ -29,7 +29,9 @@ import {
 } from "@rizlife/shared/ui";
 import { validateSubmissionUrl } from "@rizlife/shared/validation";
 import {
+  FINALS_TRACK_LABELS,
   QUEST_CATEGORY_LABELS,
+  type FinalsTrackValue,
   type LeaderboardEntry,
   type QuestCategoryValue,
   type SessionPayload,
@@ -72,6 +74,11 @@ interface QuestCardApiResponse {
   student: SessionPayload;
   sections: StudentSection[];
   activeSection: StudentSection | null;
+  finalsTrack?: {
+    track: FinalsTrackValue;
+    assignedModuleTitle: string | null;
+    assignedModuleUrl: string | null;
+  } | null;
   quests: StudentQuest[];
   submissions: StudentSubmission[];
   leaderboard: {
@@ -111,6 +118,11 @@ export function StudentDashboardClient({
     type: "ok" | "err";
     text: string;
   } | null>(null);
+
+  // Finals Track selection state
+  const [trackModalOpen, setTrackModalOpen] = useState(false);
+  const [trackSelectionBusy, setTrackSelectionBusy] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
 
   const loadQuestCard = useCallback(async (targetSectionId?: string) => {
     setLoading(true);
@@ -375,6 +387,81 @@ export function StudentDashboardClient({
                 {counts.overdue > 0 &&
                   `${counts.overdue} quest(s) are past deadline.`}
               </span>
+            </div>
+          )}
+
+          {/* FINALS CAPSTONE TRACK BANNER */}
+          {data.finalsTrack && (
+            <div className="rounded border border-[#C6B393] bg-[#FFFBF3] p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#EFE6D2] text-[#8A6923] text-lg">
+                    {data.finalsTrack.track === "SYSTEM"
+                      ? "💻"
+                      : data.finalsTrack.track === "OPENLEARNING_MODULE"
+                      ? "📖"
+                      : "⏳"}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A6923]">
+                        RizLife Finals Capstone Requirement
+                      </span>
+                      {data.finalsTrack.track === "UNDECIDED" && (
+                        <span className="animate-pulse rounded bg-[#FEE2E2] px-1.5 py-0.2 text-[10px] font-bold text-[#991B1B]">
+                          Action Required
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm font-bold text-[#16192C]">
+                      {data.finalsTrack.track === "SYSTEM" &&
+                        "Option A: Creating a System (Software/App Project)"}
+                      {data.finalsTrack.track === "OPENLEARNING_MODULE" &&
+                        `Option B: OpenLearning Module — ${
+                          data.finalsTrack.assignedModuleTitle ||
+                          "Awaiting Teacher/Admin Module Assignment"
+                        }`}
+                      {data.finalsTrack.track === "UNDECIDED" &&
+                        "Choose your Finals Track: System vs. OpenLearning Module"}
+                    </div>
+                    <p className="mt-0.5 text-xs text-[#5E5246]">
+                      {data.finalsTrack.track === "SYSTEM" &&
+                        "You are creating a system/software project for your capstone."}
+                      {data.finalsTrack.track === "OPENLEARNING_MODULE" &&
+                        (data.finalsTrack.assignedModuleTitle
+                          ? "You are assigned to complete this specific OpenLearning module for your final output."
+                          : "You chose the Module track! Your professor or admin will configure your specific module.")}
+                      {data.finalsTrack.track === "UNDECIDED" &&
+                        "Decide whether you want to build a system project or complete an assigned OpenLearning module."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTrackModalOpen(true)}
+                    className="btn-heritage-paper px-3 py-1.5 text-xs font-semibold"
+                  >
+                    {data.finalsTrack.track === "UNDECIDED"
+                      ? "Choose My Track"
+                      : "Change Track"}
+                  </button>
+
+                  {data.finalsTrack.track === "OPENLEARNING_MODULE" &&
+                    data.finalsTrack.assignedModuleUrl && (
+                      <a
+                        href={data.finalsTrack.assignedModuleUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-heritage-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                      >
+                        <span>Launch OpenLearning Module</span>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -774,6 +861,138 @@ export function StudentDashboardClient({
         highlightText={urlInput.trim()}
         confirmLabel="Yes, Submit & Notify Teacher"
       />
+
+      {/* FINALS TRACK SELECTION MODAL */}
+      <ModalDrawer
+        open={trackModalOpen}
+        onClose={() => setTrackModalOpen(false)}
+        title="Choose Your Finals Capstone Track"
+        subtitle={data?.activeSection?.code ? `Section ${data.activeSection.code}` : undefined}
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-[#5E5246]">
+            For your RizLife final output, choose whether you will create an original system/application or complete an assigned OpenLearning module.
+          </p>
+
+          {trackError && (
+            <div className="rounded border border-[#A92B2C] bg-[#FEE2E2] p-2.5 text-xs font-semibold text-[#7F1D1D]">
+              {trackError}
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* OPTION 1: CREATE SYSTEM */}
+            <button
+              type="button"
+              disabled={trackSelectionBusy}
+              onClick={async () => {
+                if (!data?.activeSection) return;
+                setTrackSelectionBusy(true);
+                setTrackError(null);
+                try {
+                  const res = await fetch("/api/finals-track", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      sectionId: data.activeSection.id,
+                      finalsTrack: "SYSTEM",
+                    }),
+                  });
+                  const json = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    setTrackError(json.error || "Failed to update track. Please try again.");
+                    return;
+                  }
+                  setTrackModalOpen(false);
+                  await loadQuestCard(data.activeSection.id);
+                } catch {
+                  setTrackError("Network error while selecting track.");
+                } finally {
+                  setTrackSelectionBusy(false);
+                }
+              }}
+              className={`flex flex-col items-start rounded-lg border-2 p-4 text-left transition hover:shadow-md ${
+                data?.finalsTrack?.track === "SYSTEM"
+                  ? "border-[#16192C] bg-[#EFE6D2]"
+                  : "border-[#C6B393] bg-white hover:border-[#8A6923]"
+              }`}
+            >
+              <div className="text-2xl mb-1">💻</div>
+              <div className="font-display text-sm font-bold text-[#16192C]">
+                Option A: Create a System
+              </div>
+              <p className="mt-1 text-[11px] text-[#5E5246]">
+                Develop and submit an original software, web app, or digital platform inspired by Rizal&apos;s ideals.
+              </p>
+              {data?.finalsTrack?.track === "SYSTEM" && (
+                <span className="mt-3 inline-block rounded bg-[#16192C] px-2 py-0.5 text-[10px] font-bold text-[#D4AB50]">
+                  ✓ Current Selection
+                </span>
+              )}
+            </button>
+
+            {/* OPTION 2: OPENLEARNING MODULE */}
+            <button
+              type="button"
+              disabled={trackSelectionBusy}
+              onClick={async () => {
+                if (!data?.activeSection) return;
+                setTrackSelectionBusy(true);
+                setTrackError(null);
+                try {
+                  const res = await fetch("/api/finals-track", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      sectionId: data.activeSection.id,
+                      finalsTrack: "OPENLEARNING_MODULE",
+                    }),
+                  });
+                  const json = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    setTrackError(json.error || "Failed to update track. Please try again.");
+                    return;
+                  }
+                  setTrackModalOpen(false);
+                  await loadQuestCard(data.activeSection.id);
+                } catch {
+                  setTrackError("Network error while selecting track.");
+                } finally {
+                  setTrackSelectionBusy(false);
+                }
+              }}
+              className={`flex flex-col items-start rounded-lg border-2 p-4 text-left transition hover:shadow-md ${
+                data?.finalsTrack?.track === "OPENLEARNING_MODULE"
+                  ? "border-[#8A6923] bg-[#FFFBEB]"
+                  : "border-[#C6B393] bg-white hover:border-[#8A6923]"
+              }`}
+            >
+              <div className="text-2xl mb-1">📖</div>
+              <div className="font-display text-sm font-bold text-[#16192C]">
+                Option B: OpenLearning Module
+              </div>
+              <p className="mt-1 text-[11px] text-[#5E5246]">
+                Opt for the academic module track. Your teacher or admin will configure the specific module you need to finish.
+              </p>
+              {data?.finalsTrack?.track === "OPENLEARNING_MODULE" && (
+                <span className="mt-3 inline-block rounded bg-[#8A6923] px-2 py-0.5 text-[10px] font-bold text-white">
+                  ✓ Current Selection
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setTrackModalOpen(false)}
+              className="btn-heritage-paper px-4 py-1.5 text-xs font-semibold"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </ModalDrawer>
     </VintageShell>
   );
 }

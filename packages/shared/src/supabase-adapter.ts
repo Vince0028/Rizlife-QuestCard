@@ -40,6 +40,7 @@ const ENUMS = {
   Role: ["STUDENT", "TEACHER", "ADMIN"],
   QuestCategory: ["SELF_PACED", "ON_SITE_LIBRARY", "CREATIVE_OUTPUT", "REFLECTION"],
   SubmissionStatus: ["NOT_STARTED", "PENDING_REVIEW", "STAMPED", "NEEDS_REVISION"],
+  FinalsTrack: ["UNDECIDED", "SYSTEM", "OPENLEARNING_MODULE"],
 } as const;
 
 type EnumName = keyof typeof ENUMS;
@@ -146,9 +147,12 @@ const SCHEMA: Record<TableName, ModelSpec> = {
       id: "String",
       studentId: "String",
       sectionId: "String",
+      finalsTrack: "FinalsTrack",
+      assignedModuleTitle: "String?",
+      assignedModuleUrl: "String?",
       enrolledAt: "DateTime",
     }),
-    defaults: {},
+    defaults: { finalsTrack: "UNDECIDED" },
     nowDefaults: ["enrolledAt"],
     hasUpdatedAt: false,
     unique: [["studentId", "sectionId"]],
