@@ -50,8 +50,10 @@ export async function GET(req: NextRequest) {
   }
 
   const requestedSectionId = req.nextUrl.searchParams.get("sectionId");
-  const activeSection =
-    sections.find((s) => s.id === requestedSectionId) ?? sections[0];
+  const activeEnrollment =
+    enrollments.find((e) => e.section.id === requestedSectionId) ??
+    enrollments[0];
+  const activeSection = sections.find((s) => s.id === activeEnrollment.section.id) ?? sections[0];
 
   const [quests, mySubmissions] = await Promise.all([
     prisma.quest.findMany({
@@ -111,6 +113,11 @@ export async function GET(req: NextRequest) {
     student: session,
     sections,
     activeSection,
+    finalsTrack: {
+      track: activeEnrollment.finalsTrack,
+      assignedModuleTitle: activeEnrollment.assignedModuleTitle,
+      assignedModuleUrl: activeEnrollment.assignedModuleUrl,
+    },
     quests: quests.map((q) => ({
       id: q.id,
       taskNumber: q.taskNumber,

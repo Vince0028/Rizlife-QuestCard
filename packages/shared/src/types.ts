@@ -12,6 +12,54 @@ export type SubmissionStatusValue =
   | "STAMPED"
   | "NEEDS_REVISION";
 
+export type FinalsTrackValue = "UNDECIDED" | "SYSTEM" | "OPENLEARNING_MODULE";
+
+export interface PresetOpenLearningModule {
+  id: string;
+  title: string;
+  url: string;
+  description?: string;
+}
+
+export const PRESET_OPENLEARNING_MODULES: PresetOpenLearningModule[] = [
+  {
+    id: "jose-app",
+    title: "JOSE Gamified App & Mastery Quizzes",
+    url: "https://www.openlearning.com/apc/courses/rizlife/task-10-jose-gamified-app",
+    description: "Interactive learning modules and mastery quizzes inside JOSE Gamified App",
+  },
+  {
+    id: "rizal-arcade",
+    title: "Rizal Arcade Gamified Challenge",
+    url: "https://www.openlearning.com/apc/courses/rizlife/task-21-rizal-arcade-gamified-app",
+    description: "Rizal Arcade historical scenarios and mastery challenges",
+  },
+  {
+    id: "noli-fili-deepdive",
+    title: "Noli Me Tangere & El Filibusterismo Literary Analysis",
+    url: "https://www.openlearning.com/apc/courses/rizlife/noli-fili-literary-analysis",
+    description: "Comprehensive character and socio-political comparative analysis",
+  },
+  {
+    id: "propaganda-movement",
+    title: "The Propaganda Movement & La Solidaridad Press Archives",
+    url: "https://www.openlearning.com/apc/courses/rizlife/propaganda-movement-archives",
+    description: "Historical archival evaluation of 19th-century reform journalism",
+  },
+  {
+    id: "women-malolos-morga",
+    title: "Women of Malolos & Morga's Sucesos Historiography",
+    url: "https://www.openlearning.com/apc/courses/rizlife/women-malolos-morga-historiography",
+    description: "Critical inquiry into gender empowerment and pre-colonial Philippine history",
+  },
+];
+
+export const FINALS_TRACK_LABELS: Record<FinalsTrackValue, string> = {
+  UNDECIDED: "Undecided / Pending",
+  SYSTEM: "Creating a System",
+  OPENLEARNING_MODULE: "OpenLearning Module",
+};
+
 export interface SessionPayload {
   userId: string;
   email: string;

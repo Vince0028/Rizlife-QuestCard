@@ -141,6 +141,14 @@ export const updateStudentSchema = z.object({
   email: z.string().trim().email("Valid APC email required.").toLowerCase().optional(),
 });
 
+export const updateEnrollmentTrackSchema = z.object({
+  sectionId: z.string().min(1, "Section ID is required."),
+  studentIds: z.array(z.string().min(1)).min(1, "At least one student must be selected."),
+  finalsTrack: z.enum(["UNDECIDED", "SYSTEM", "OPENLEARNING_MODULE"]),
+  assignedModuleTitle: z.string().trim().max(180).optional().nullable(),
+  assignedModuleUrl: z.string().trim().max(500).optional().nullable(),
+});
+
 export const createSectionSchema = z.object({
   code: z.string().trim().min(2, "Section code is required.").max(30).toUpperCase(),
   name: z.string().trim().min(2, "Section title is required.").max(120),
