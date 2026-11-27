@@ -143,7 +143,10 @@ export const updateStudentSchema = z.object({
 
 export const updateEnrollmentTrackSchema = z.object({
   sectionId: z.string().min(1, "Section ID is required."),
-  studentIds: z.array(z.string().min(1)).min(1, "At least one student must be selected."),
+  studentIds: z
+    .array(z.string().min(1).max(64))
+    .min(1, "At least one student must be selected.")
+    .max(500, "Assign at most 500 students at a time."),
   finalsTrack: z.enum(["UNDECIDED", "SYSTEM", "OPENLEARNING_MODULE"]),
   assignedModuleTitle: z.string().trim().max(180).optional().nullable(),
   assignedModuleUrl: z.string().trim().max(500).optional().nullable(),
@@ -177,7 +180,7 @@ export const createUserAdminSchema = z.object({
   email: z.string().trim().email().toLowerCase(),
   password: z.string().min(6).max(128).optional(),
   mustChangePassword: z.boolean().optional(),
-  assignSectionIds: z.array(z.string()).optional(),
+  assignSectionIds: z.array(z.string().max(64)).max(100).optional(),
 });
 
 export const systemSettingsSchema = z.object({

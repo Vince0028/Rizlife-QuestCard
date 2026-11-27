@@ -5,15 +5,12 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle2,
-  Clock,
   ExternalLink,
   Feather,
   LayoutGrid,
   ListChecks,
-  Lock,
   RefreshCw,
   Send,
-  Sparkles,
   Trophy,
 } from "lucide-react";
 import {
@@ -21,8 +18,6 @@ import {
   LamparillaWreathWatermark,
   ModalDrawer,
   NoliFiliBooksWatermark,
-  OpenLearningHelp,
-  QuillInkwellWatermark,
   RizalQuestCardBoard,
   StatusBadge,
   VintageShell,
@@ -34,86 +29,16 @@ import {
   type DeadlineStateKind,
   type QuestDeadlineState,
 } from "@rizlife/shared/deadline";
-import {
-  FINALS_TRACK_LABELS,
-  QUEST_CATEGORY_LABELS,
-  type FinalsTrackValue,
-  type LeaderboardEntry,
-  type QuestCategoryValue,
-  type SessionPayload,
-  type SubmissionStatusValue,
-} from "@rizlife/shared/types";
-
-interface StudentSection {
-  id: string;
-  code: string;
-  name: string;
-  term: string;
-  leaderboardVisible: boolean;
-  teacherName: string;
-  teacherEmail: string;
-}
-
-interface StudentQuest {
-  id: string;
-  taskNumber: number;
-  title: string;
-  description: string;
-  category: QuestCategoryValue;
-  openlearningUrl: string | null;
-  startDate: string | null;
-  deadline: string | null;
-}
-
-interface StudentSubmission {
-  id: string;
-  questId: string;
-  submissionUrl: string | null;
-  studentNote: string | null;
-  status: SubmissionStatusValue;
-  teacherFeedback: string | null;
-  submittedAt: string | null;
-  stampedAt: string | null;
-}
-
-interface QuestCardApiResponse {
-  student: SessionPayload;
-  sections: StudentSection[];
-  activeSection: StudentSection | null;
-  finalsTrack?: {
-    track: FinalsTrackValue;
-    assignedModuleTitle: string | null;
-    assignedModuleUrl: string | null;
-  } | null;
-  quests: StudentQuest[];
-  submissions: StudentSubmission[];
-  leaderboard: {
-    visible: boolean;
-    entries: LeaderboardEntry[];
-  };
-}
-
-type ListFilter = "ALL" | SubmissionStatusValue | "OVERDUE" | "DUE_SOON";
+import { QUEST_CATEGORY_LABELS, type SessionPayload } from "@rizlife/shared/types";
+import type {
+  StudentQuest,
+  StudentSubmission,
+  QuestCardApiResponse,
+  ListFilter,
+} from "./student-dashboard-types";
+import { deadlineToneClass, formatShortDate } from "./student-dashboard-format";
 
 const MAX_BANNER_CHIPS = 5;
-
-/** Text colour for a deadline line, by deadline state. */
-function deadlineToneClass(kind: DeadlineStateKind): string {
-  if (kind === "OVERDUE") return "font-semibold text-[#A92B2C]";
-  if (kind === "DUE_TODAY" || kind === "DUE_SOON") return "font-semibold text-[#92400E]";
-  return "";
-}
-
-function formatShortDate(iso: string | null): string {
-  if (!iso) return "Open";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "Open";
-  return d.toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export function StudentDashboardClient({
   initialUser,

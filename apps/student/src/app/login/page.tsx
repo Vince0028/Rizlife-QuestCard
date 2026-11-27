@@ -32,7 +32,7 @@ export default async function StudentLoginPage({
       portal="student"
       portalTitle="Student QuestCard"
       portalSubtitle="Sign in to view your Rizal tasks, submit OpenLearning links, and track your stamps."
-      defaultDemoEmail="vpalobin@student.apc.edu.ph"
+      defaultDemoEmail="jdelacruz@student.apc.edu.ph"
       defaultDemoPassword="Student@2026"
       microsoftSsoConfigured={isMicrosoftSsoConfigured()}
       initialError={

@@ -129,10 +129,22 @@ export async function getSectionWorkspaceData(
         orderBy: [{ submittedAt: "asc" }],
       }),
       getSectionDigestQueue(sectionId),
+      // htmlPreview is loaded on demand (getDigestLogPreview) so the workspace payload
+      // and the Supabase adapter cache don't carry 15 full email bodies.
       prisma.emailDigestLog.findMany({
         where: { sectionId },
         orderBy: { sentAt: "desc" },
         take: 15,
+        select: {
+          id: true,
+          recipientEmail: true,
+          subject: true,
+          submissionCount: true,
+          triggerType: true,
+          deliveryStatus: true,
+          errorMessage: true,
+          sentAt: true,
+        },
       }),
     ]);
 
@@ -221,7 +233,6 @@ export async function getSectionWorkspaceData(
       submissionCount: l.submissionCount,
       triggerType: l.triggerType,
       deliveryStatus: l.deliveryStatus,
-      htmlPreview: l.htmlPreview,
       errorMessage: l.errorMessage,
       sentAt: l.sentAt.toISOString(),
     })),
@@ -490,19 +501,12 @@ export async function reviewOrStampSubmission(
   }
   await assertSectionAccess(quest.sectionId, user);
 
-  let normalizedUrl: string | undefined | null = undefined;
-  if (submissionUrl !== undefined) {
-    const trimmed = submissionUrl?.trim() || "";
-    if (trimmed) {
-      const check = validateSubmissionUrl(trimmed);
-      if (!check.valid) {
-        throw Object.assign(new Error(check.error || "Invalid URL"), {
-          status: 400,
-        });
-      }
-      normalizedUrl = check.normalizedUrl;
-    } else {
-      normalizedUrl = null;
+  // Teachers can't edit a student's link through review; still reject a malformed one.
+  const trimmedUrl = submissionUrl?.trim();
+  if (trimmedUrl) {
+    const check = validateSubmissionUrl(trimmedUrl);
+    if (!check.valid) {
+      throw Object.assign(new Error(check.error || "Invalid URL"), { status: 400 });
     }
   }
 
@@ -1087,6 +1091,20 @@ export async function exportSectionTrackerFile(params: {
     filename: `${workspace.section.code}_Task_Tracker.xlsx`,
     data: buffer,
   };
+}
+
+/** Full HTML of one sent/preview digest, for the teacher's "View email" modal. */
+export async function getDigestLogPreview(
+  sectionId: string,
+  logId: string,
+  user: SessionPayload
+) {
+  await assertSectionAccess(sectionId, user);
+  const log = await prisma.emailDigestLog.findUnique({ where: { id: logId } });
+  if (!log || log.sectionId !== sectionId) {
+    throw Object.assign(new Error("Digest log not found."), { status: 404 });
+  }
+  return { id: log.id, subject: log.subject, html: log.htmlPreview };
 }
 
 export async function triggerManualSectionDigest(

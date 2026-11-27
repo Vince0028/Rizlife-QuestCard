@@ -14,16 +14,25 @@
     "build:student": "npm run build --workspace=@rizlife/student",
     "build:teacher": "npm run build --workspace=@rizlife/teacher",
     "build:admin": "npm run build --workspace=@rizlife/admin",
+    "lint": "eslint .",
     "typecheck": "npm run typecheck --workspace=@rizlife/shared && npm run typecheck --workspace=@rizlife/student && npm run typecheck --workspace=@rizlife/teacher && npm run typecheck --workspace=@rizlife/admin",
     "prisma:generate": "prisma generate --schema=packages/shared/prisma/schema.prisma",
-    "prisma:validate": "prisma validate --schema=packages/shared/prisma/schema.prisma",
+    "prisma:validate": "node scripts/prisma-validate.mjs",
     "db:push": "prisma db push --schema=packages/shared/prisma/schema.prisma",
     "db:seed": "tsx packages/shared/prisma/seed.ts",
     "db:studio": "prisma studio --schema=packages/shared/prisma/schema.prisma",
-    "verify": "tsx packages/shared/src/__tests__/verify.ts"
+    "verify": "tsx packages/shared/src/__tests__/verify.ts",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "3.3.7",
+    "@playwright/test": "1.65.1",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.29",
     "tsx": "4.23.15",
     "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

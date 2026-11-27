@@ -11,3 +11,10 @@ next-env.d.ts
 npm-debug.log*
 .DS_Store
 .rizlife-db.json*
+
+# Real class rosters contain student PII: keep them local (see supabase/students.example.sql)
+supabase/*_students.sql
+
+# Playwright
+playwright-report/
+test-results/

@@ -48,7 +48,13 @@ export async function GET() {
     prisma.submission.count({ where: { status: "PENDING_REVIEW" } }),
     prisma.emailDigestLog.count(),
     prisma.emailDigestLog.findMany({
-      include: {
+      select: {
+        id: true,
+        recipientEmail: true,
+        submissionCount: true,
+        triggerType: true,
+        deliveryStatus: true,
+        sentAt: true,
         section: { select: { code: true } },
         teacher: { select: { firstName: true, lastName: true } },
       },

@@ -14,7 +14,6 @@ import {
   Eye,
   Feather,
   FileSpreadsheet,
-  HelpCircle,
   KeyRound,
   Layers,
   Mail,
@@ -34,9 +33,7 @@ import {
   FINALS_TRACK_LABELS,
   PRESET_OPENLEARNING_MODULES,
   QUEST_CATEGORY_LABELS,
-  type DigestQueueSummary,
   type FinalsTrackValue,
-  type LeaderboardEntry,
   type QuestCategoryValue,
   type SubmissionStatusValue,
 } from "../types";
@@ -50,120 +47,32 @@ import {
 import { RizalQuestCardBoard } from "./RizalQuestCardBoard";
 import { StampCelebrationOverlay } from "./StampCelebrationOverlay";
 import { StatusBadge } from "./StatusBadge";
+import type {
+  WorkspaceSectionOption,
+  WorkspaceQuestItem,
+  WorkspaceStudentItem,
+  WorkspaceSubmissionItem,
+  WorkspacePayload,
+  WorkspaceTab,
+  WorkspaceSummaryStats,
+} from "./teacher-workspace/types";
+import {
+  formatDateTime,
+  formatDeliveryLabel,
+  formatTriggerLabel,
+  toDatetimeLocal,
+} from "./teacher-workspace/format";
 
-export interface WorkspaceSectionOption {
-  id: string;
-  code: string;
-  name: string;
-  term: string;
-  teacherId: string | null;
-  teacher?: { firstName: string; lastName: string; email: string } | null;
-  _count?: { enrollments: number; quests: number };
-}
-
-export interface WorkspaceQuestItem {
-  id: string;
-  sectionId: string;
-  taskNumber: number;
-  title: string;
-  description: string;
-  category: QuestCategoryValue;
-  openlearningUrl: string | null;
-  startDate: string | null;
-  deadline: string | null;
-}
-
-export interface WorkspaceStudentItem {
-  id: string;
-  studentId: string | null;
-  firstName: string;
-  middleName: string | null;
-  lastName: string;
-  email: string;
-  courseCode: string | null;
-  mustChangePassword: boolean;
-  isActive: boolean;
-  finalsTrack?: FinalsTrackValue;
-  assignedModuleTitle?: string | null;
-  assignedModuleUrl?: string | null;
-}
-
-export interface WorkspaceSubmissionItem {
-  id: string;
-  questId: string;
-  studentId: string;
-  submissionUrl: string | null;
-  studentNote: string | null;
-  status: SubmissionStatusValue;
-  teacherFeedback: string | null;
-  firstSubmittedAt: string | null;
-  submittedAt: string | null;
-  stampedAt: string | null;
-  stampedByName?: string | null;
-  includedInDigest: boolean;
-  quest: { id: string; taskNumber: number; title: string };
-  student: {
-    id: string;
-    studentId: string | null;
-    firstName: string;
-    middleName?: string | null;
-    lastName: string;
-    courseCode: string | null;
-    email: string;
-  };
-}
-
-export interface WorkspaceDigestLog {
-  id: string;
-  recipientEmail: string;
-  subject: string;
-  submissionCount: number;
-  triggerType: string;
-  deliveryStatus: string;
-  htmlPreview: string;
-  errorMessage: string | null;
-  sentAt: string;
-}
-
-export interface WorkspacePayload {
-  section: {
-    id: string;
-    code: string;
-    name: string;
-    term: string;
-    teacherId: string | null;
-    teacherName: string;
-    teacherEmail: string;
-    leaderboardVisible: boolean;
-    digestThreshold: number;
-    digestEnabled: boolean;
-    lastDigestSentAt: string | null;
-  };
-  quests: WorkspaceQuestItem[];
-  students: WorkspaceStudentItem[];
-  submissions: WorkspaceSubmissionItem[];
-  leaderboard: LeaderboardEntry[];
-  digestQueue: DigestQueueSummary | null;
-  digestLogs: WorkspaceDigestLog[];
-}
-
-export type WorkspaceTab =
-  | "queue"
-  | "stampcard"
-  | "tracker"
-  | "quests"
-  | "leaderboard"
-  | "digest"
-  | "roster";
-
-export interface WorkspaceSummaryStats {
-  sectionCode: string;
-  studentsCount: number;
-  questsCount: number;
-  pendingCount: number;
-  digestPendingCount: number;
-  digestThreshold: number;
-}
+export type {
+  WorkspaceSectionOption,
+  WorkspaceQuestItem,
+  WorkspaceStudentItem,
+  WorkspaceSubmissionItem,
+  WorkspaceDigestLog,
+  WorkspacePayload,
+  WorkspaceTab,
+  WorkspaceSummaryStats,
+} from "./teacher-workspace/types";
 
 interface TeacherWorkspaceProps {
   apiBase?: string;
@@ -181,41 +90,6 @@ interface TeacherWorkspaceProps {
     email: string;
   }[];
   onSectionsChanged?: () => void;
-}
-
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDeliveryLabel(status: string): string {
-  if (status === "SENT") return "Sent to Outlook";
-  if (status === "PREVIEW_ONLY") return "Saved Email Preview";
-  return "Delivery Failed";
-}
-
-function formatTriggerLabel(trigger: string): string {
-  if (trigger === "THRESHOLD") return "Auto-sent at batch threshold";
-  if (trigger === "SCHEDULED") return "Daily scheduled digest";
-  return "Sent manually by teacher";
 }
 
 export function TeacherWorkspace({
@@ -265,7 +139,6 @@ export function TeacherWorkspace({
   const [banner, setBanner] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
-  const [showGuide, setShowGuide] = useState(true);
 
   const [stampOverlay, setStampOverlay] = useState<{
     visible: boolean;
@@ -293,7 +166,7 @@ export function TeacherWorkspace({
   );
   const [stampCardFeedback, setStampCardFeedback] = useState("");
   const [stampCardUrl, setStampCardUrl] = useState("");
-  const [stampCardBusy, setStampCardBusy] = useState(false);
+  const [, setStampCardBusy] = useState(false);
 
   const [trackerSearch, setTrackerSearch] = useState("");
   const [trackerCourseFilter, setTrackerCourseFilter] = useState("ALL");
@@ -352,7 +225,6 @@ export function TeacherWorkspace({
   } | null>(null);
   const [importBusy, setImportBusy] = useState(false);
 
-  const [resetTarget, setResetTarget] = useState<WorkspaceStudentItem | null>(null);
   const [resetNewPass, setResetNewPass] = useState("Student@2026");
 
   const [showEditSection, setShowEditSection] = useState(false);
@@ -434,6 +306,24 @@ export function TeacherWorkspace({
       setBanner((prev) => (prev?.text === text ? null : prev));
     }, 5500);
   }, []);
+
+  /** Digest-log HTML isn't part of the workspace payload; load it when opened. */
+  async function openDigestLogPreview(logId: string) {
+    if (!workspace) return;
+    try {
+      const res = await fetch(
+        `${apiBase}/sections/${workspace.section.id}/digest-logs/${logId}`
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast("err", data.error || "Could not load that email.");
+        return;
+      }
+      setPreviewHtml({ subject: data.subject, html: data.html });
+    } catch {
+      showToast("err", "Network error while loading the email.");
+    }
+  }
 
   const triggerStampAnimation = useCallback(
     (studentId: string, questId: string, taskNumber: number, studentName: string) => {
@@ -737,6 +627,7 @@ export function TeacherWorkspace({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   function selectStampCardQuest(quest: WorkspaceQuestItem) {
     if (!activeStampCardStudent) return;
     const sub = submissionMap.get(`${activeStampCardStudent.id}:${quest.id}`);
@@ -745,6 +636,7 @@ export function TeacherWorkspace({
     setStampCardFeedback(sub?.teacherFeedback || "");
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   function requestStampCardAction(action: "STAMP" | "NEEDS_REVISION" | "RESET") {
     if (!activeStampCardStudent || !stampCardQuest) return;
     if (action === "RESET") {
@@ -916,6 +808,7 @@ export function TeacherWorkspace({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   function openEditSectionModal() {
     if (!workspace) return;
     setEditSecCode(workspace.section.code);
@@ -2170,7 +2063,7 @@ export function TeacherWorkspace({
             </div>
           ) : (
             <div className="space-y-2.5">
-              {workspace.quests.map((q, idx) => (
+              {workspace.quests.map((q) => (
                 <div
                   key={q.id}
                   className="flex flex-col gap-3 border border-[#C6B393] bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -2486,12 +2379,7 @@ export function TeacherWorkspace({
                         <td className="px-3 py-2 text-right">
                           <button
                             type="button"
-                            onClick={() =>
-                              setPreviewHtml({
-                                subject: log.subject,
-                                html: log.htmlPreview,
-                              })
-                            }
+                            onClick={() => void openDigestLogPreview(log.id)}
                             className="text-xs font-bold text-[#0E8F47] hover:underline cursor-pointer"
                           >
                             View Email
@@ -2697,7 +2585,7 @@ export function TeacherWorkspace({
               </label>
               <input
                 required
-                placeholder="e.g. 2024-140101"
+                placeholder="e.g. 2099-000001"
                 value={stuId}
                 onChange={(e) => setStuId(e.target.value)}
                 className="folio-input w-full px-3 py-2 font-mono text-xs"
@@ -2723,7 +2611,7 @@ export function TeacherWorkspace({
               </label>
               <input
                 required
-                placeholder="e.g. Alobin"
+                placeholder="e.g. Dela Cruz"
                 value={stuLast}
                 onChange={(e) => setStuLast(e.target.value)}
                 className="folio-input w-full px-3 py-2 text-xs"
@@ -2735,7 +2623,7 @@ export function TeacherWorkspace({
               </label>
               <input
                 required
-                placeholder="e.g. Vince Nelmar"
+                placeholder="e.g. Juan Miguel"
                 value={stuFirst}
                 onChange={(e) => setStuFirst(e.target.value)}
                 className="folio-input w-full px-3 py-2 text-xs"
@@ -2746,7 +2634,7 @@ export function TeacherWorkspace({
                 Middle Name
               </label>
               <input
-                placeholder="e.g. Pega"
+                placeholder="e.g. Reyes"
                 value={stuMiddle}
                 onChange={(e) => setStuMiddle(e.target.value)}
                 className="folio-input w-full px-3 py-2 text-xs"
@@ -2761,7 +2649,7 @@ export function TeacherWorkspace({
             <input
               required
               type="email"
-              placeholder="vpalobin@student.apc.edu.ph"
+              placeholder="jdelacruz@student.apc.edu.ph"
               value={stuEmail}
               onChange={(e) => setStuEmail(e.target.value)}
               className="folio-input w-full px-3 py-2 text-xs"

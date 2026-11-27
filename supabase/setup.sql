@@ -224,11 +224,12 @@ INSERT INTO "SystemSetting" (
 )
 ON CONFLICT ("id") DO NOTHING;
 
--- 6. First Admin, First Teacher, and Student (vpalobin@student.apc.edu.ph)
+-- 6. Demo Admin, Teacher, and Student (fictional people; rotate these passwords
+--    before real use, or create real accounts in the Admin Console instead).
 -- Passwords:
---   Admin   (admin@apc.edu.ph)              -> Admin@RizLife2026
---   Teacher (teacher@apc.edu.ph)            -> Teacher@RizLife2026
---   Student (vpalobin@student.apc.edu.ph)   -> Student@2026
+--   Admin   (admin@apc.edu.ph)               -> Admin@RizLife2026
+--   Teacher (teacher@apc.edu.ph)             -> Teacher@RizLife2026
+--   Student (jdelacruz@student.apc.edu.ph)   -> Student@2026
 INSERT INTO "User" (
   "id", "studentId", "firstName", "middleName", "lastName",
   "email", "passwordHash", "role", "courseCode",
@@ -237,9 +238,9 @@ INSERT INTO "User" (
 (
   'usr_admin_01',
   NULL,
-  'Clarisse',
+  'RizLife',
   NULL,
-  'Valdez',
+  'Admin',
   'admin@apc.edu.ph',
   '$2b$10$Cy7lPoCH/5hxqLN241wX7.0nAiIFq5aU0FqyIDxgMjmARFaNEOkQe',
   'ADMIN',
@@ -252,9 +253,9 @@ INSERT INTO "User" (
 (
   'usr_teacher_01',
   NULL,
-  'April Anne',
-  'G.',
-  'Tuburan',
+  'Maria Clara',
+  NULL,
+  'de los Santos',
   'teacher@apc.edu.ph',
   '$2b$10$k2ee53CavLcz6KlRu2kug.9Tvcq7lXcHjJNr0L05IZGBvNabEj9Lu',
   'TEACHER',
@@ -265,12 +266,12 @@ INSERT INTO "User" (
   CURRENT_TIMESTAMP
 ),
 (
-  'usr_student_vince',
-  '2024-140101',
-  'Vince Nelmar',
-  'Pega',
-  'Alobin',
-  'vpalobin@student.apc.edu.ph',
+  'usr_student_demo',
+  '2099-000001',
+  'Juan Miguel',
+  'Reyes',
+  'Dela Cruz',
+  'jdelacruz@student.apc.edu.ph',
   '$2b$10$N2qYNY8Prf2CFM4ZVkIK8OjpaDFbA.E6xLCCWystzp0L32dFcWp6i',
   'STUDENT',
   'BSIT',
@@ -321,7 +322,7 @@ SET
   "name" = EXCLUDED."name",
   "updatedAt" = CURRENT_TIMESTAMP;
 
--- 8. Enroll Vince Alobin (vpalobin@student.apc.edu.ph) into Section BSIT241
+-- 8. Enroll the demo student (jdelacruz@student.apc.edu.ph) into Section BSIT241
 INSERT INTO "Enrollment" (
   "id",
   "studentId",
@@ -329,13 +330,13 @@ INSERT INTO "Enrollment" (
   "enrolledAt"
 )
 SELECT
-  'enr_vince_bsit',
+  'enr_demo_bsit',
   u."id",
   s."id",
   CURRENT_TIMESTAMP
 FROM "User" u
 JOIN "Section" s ON s."code" = 'BSIT241' AND s."term" = 'Term 2 AY 2026-2027'
-WHERE u."email" = 'vpalobin@student.apc.edu.ph'
+WHERE u."email" = 'jdelacruz@student.apc.edu.ph'
 ON CONFLICT ("studentId", "sectionId") DO NOTHING;
 
 -- 9. Grant Supabase API Role Permissions (for SUPABASE_URL + SUPABASE_SECRET_KEY)

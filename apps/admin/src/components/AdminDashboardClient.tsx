@@ -3,13 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
-  Building2,
-  CheckCircle2,
   Edit3,
-  Feather,
   KeyRound,
   Layers,
-  Mail,
   Plus,
   RefreshCw,
   Settings,
@@ -28,71 +24,15 @@ import {
   RizalMonumentWatermark,
   TeacherWorkspace,
   VintageShell,
-  type WorkspaceSectionOption,
 } from "@rizlife/shared/ui";
 import type { RoleValue, SessionPayload } from "@rizlife/shared/types";
+import type {
+  AdminUserRow,
+  AdminSectionRow,
+  AdminOverviewResponse,
+  AdminTab,
+} from "./admin-dashboard-types";
 
-interface AdminUserRow {
-  id: string;
-  studentId: string | null;
-  firstName: string;
-  middleName: string | null;
-  lastName: string;
-  email: string;
-  role: RoleValue;
-  courseCode: string | null;
-  mustChangePassword: boolean;
-  isActive: boolean;
-  _count: { taughtSections: number; enrollments: number };
-}
-
-interface AdminSectionRow extends WorkspaceSectionOption {
-  leaderboardVisible: boolean;
-  digestThreshold: number;
-  digestEnabled: boolean;
-}
-
-interface AdminOverviewResponse {
-  metrics: {
-    totalStudents: number;
-    totalTeachers: number;
-    totalAdmins: number;
-    totalSections: number;
-    totalQuests: number;
-    stampedSubmissions: number;
-    pendingSubmissions: number;
-    digestsSent: number;
-  };
-  users: AdminUserRow[];
-  sections: AdminSectionRow[];
-  recentDigests: {
-    id: string;
-    sectionCode: string;
-    teacherName: string;
-    recipientEmail: string;
-    submissionCount: number;
-    triggerType: string;
-    deliveryStatus: string;
-    sentAt: string;
-  }[];
-  settings: {
-    activeTerm: string;
-    defaultDigestThreshold: number;
-    digestCronSchedule: string;
-    emailProvider: "preview" | "resend" | "smtp";
-    emailFromAddress: string;
-    allowedStudentDomain: string;
-    allowedStaffDomain: string;
-    microsoftSsoEnabled: boolean;
-  };
-  envStatus: {
-    microsoftSsoConfigured: boolean;
-    resendConfigured: boolean;
-    smtpConfigured: boolean;
-  };
-}
-
-type AdminTab = "overview" | "users" | "sections" | "settings" | "override";
 
 export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [tab, setTab] = useState<AdminTab>("overview");
@@ -101,7 +41,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [banner, setBanner] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
-  const [overrideSectionId, setOverrideSectionId] = useState<string | null>(null);
+  const [overrideSectionId] = useState<string | null>(null);
 
   // User provisioning & filters
   const [roleFilter, setRoleFilter] = useState<"ALL" | RoleValue>("ALL");
@@ -119,7 +59,6 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
 
   // Reset password modal
-  const [resetUser, setResetUser] = useState<AdminUserRow | null>(null);
   const [resetPwValue, setResetPwValue] = useState("RizLife@2026");
 
   // New section form
@@ -427,6 +366,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     await loadOverview();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   async function handleReassignTeacher(sectionId: string, teacherId: string) {
     const res = await fetch(`/api/workspace/sections/${sectionId}`, {
       method: "PATCH",
@@ -1161,7 +1101,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           {newRole === "STUDENT" && (
             <div className="grid gap-2 sm:grid-cols-2">
               <input
-                placeholder="Student ID (2024-140...)"
+                placeholder="Student ID (e.g. 2099-000001)"
                 value={newStudentId}
                 onChange={(e) => setNewStudentId(e.target.value)}
                 className="folio-input px-3 py-2 text-xs"

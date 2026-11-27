@@ -16,6 +16,9 @@ questcard-rizlife/
 │   └── admin/          # Vercel Project 3 — Admin Console & Override (port 3003)
 ├── packages/
 │   └── shared/         # @rizlife/shared — Prisma schema, seed, auth, digest, ExcelJS, UI kit
+├── supabase/           # SQL setup + migrations for Supabase (rosters: see Data Privacy)
+├── e2e/                # Playwright smoke tests
+├── .github/workflows/  # CI: lint, typecheck, verify, build, e2e
 ├── docker-compose.yml  # Optional local PostgreSQL 16 container
 ├── .env.example        # Environment variable template
 └── package.json        # Root workspace scripts
@@ -31,16 +34,29 @@ npm install
 npm run prisma:generate
 ```
 
-### 2. Configure PostgreSQL (`DATABASE_URL`)
-Copy `.env.example` to `.env` at the repository root and set `DATABASE_URL` (using **Supabase**, **Neon**, or local Docker Postgres via `docker compose up -d`).
+### 2. Choose a Database Backend
+Copy `.env.example` to `.env` at the repository root. All three apps read this one file. The backend is picked at startup:
 
-> **Note for Supabase on Vercel:** Use the **Transaction Pooler** URL for `DATABASE_URL` (`?pgbouncer=true&connection_limit=1` on port `6543`), or run `db:push` using your direct/session connection string.
+| Configured | Backend | Use for |
+| --- | --- | --- |
+| `DATABASE_URL` | Prisma → PostgreSQL (Supabase, Neon, or local Docker via `docker compose up -d`) | **Production**, and any real class |
+| `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (no `DATABASE_URL`) | Built-in adapter over Supabase PostgREST | Small deployments, development |
+| Neither | Local JSON file `.rizlife-db.json`, auto-seeded with demo accounts | Local development only |
 
-### 3. Push Schema & Seed Demo Data (or Run Supabase SQL)
-If using Supabase, you can either run `supabase/setup.sql` directly inside **Supabase Dashboard → SQL Editor** (which creates all tables plus `admin@apc.edu.ph`, `teacher@apc.edu.ph`, `vpalobin@student.apc.edu.ph`, and section `BSIT`), or use Prisma:
+> **Supabase on Vercel:** use the **Transaction Pooler** URL for `DATABASE_URL` (port `6543`, `?pgbouncer=true&connection_limit=1`). Use your direct or session connection string for `db:push`.
+
+### 3. Create the Schema & Seed Data
+
+**Supabase (SQL Editor):** run these in order in **Supabase Dashboard → SQL Editor**:
+1. `supabase/setup.sql`: tables, global settings, the demo admin, teacher and student, section `BSIT241`, and API grants.
+2. `supabase/migration_finals_track.sql`: **only for databases created before the Finals Track feature.** It adds `Enrollment.finalsTrack`/`assignedModule*`. Fresh `setup.sql` runs already include these.
+3. `supabase/bsit_24_tasks.sql` (optional): the 24 Rizal QuestCard tasks for `BSIT241`.
+4. Students: import the class roster through **Teacher Portal → Students → Import (.xlsx / .csv)**. For SQL seeding, copy `supabase/students.example.sql` (see [Data Privacy](#data-privacy--student-records)).
+
+**Prisma (`DATABASE_URL` set):**
 ```bash
 npm run db:push
-npm run db:seed
+npm run db:seed   # demo data (fictional people)
 ```
 
 ### 4. Run Any or All 3 Portals Simultaneously
@@ -55,6 +71,11 @@ npm run dev:admin     # http://localhost:3003
 
 ## Seeded Test Credentials
 
+All seeded people are **fictional**. These passwords are public (they're in this README), so **rotate them, or delete the demo accounts, before real students use a deployment.**
+
+- **Supabase SQL / local JSON** (`setup.sql`, `.rizlife-db.json`): `admin@apc.edu.ph` / `Admin@RizLife2026`, `teacher@apc.edu.ph` / `Teacher@RizLife2026`, `jdelacruz@student.apc.edu.ph` / `Student@2026`
+- **Prisma demo seed** (`npm run db:seed`):
+
 | Portal | Role | Email | Password | Notes |
 | --- | --- | --- | --- | --- |
 | **Student** (`:3001`) | `STUDENT` | `jdelacruz@student.apc.edu.ph` | `Student@2026` | 7 Stamped, 2 Pending, 1 Revision |
@@ -62,6 +83,38 @@ npm run dev:admin     # http://localhost:3003
 | **Teacher** (`:3002`) | `TEACHER` | `prof.mendoza@apc.edu.ph` | `Teacher@RizLife2026` | Owns section `IT241` (10 students, 12 quests) |
 | **Teacher** (`:3002`) | `TEACHER` | `prof.reyes@apc.edu.ph` | `Teacher@RizLife2026` | Owns section `IT242` |
 | **Admin** (`:3003`) | `ADMIN` | `admin@apc.edu.ph` | `Admin@RizLife2026` | Full system + teacher override access |
+
+---
+
+## Checks, Tests & CI
+
+```bash
+npm run lint             # ESLint (next/core-web-vitals + next/typescript) for the whole monorepo
+npm run typecheck        # tsc for shared, student, teacher, admin
+npm run prisma:validate  # works without DATABASE_URL (uses a placeholder)
+npm run verify           # core suite: auth, leaderboard, digest, Excel, lifecycle, SSO,
+                         # workspace route authorization (401/403), middleware, adapter
+npm run build            # all 3 portals
+npm run test:e2e         # Playwright smoke tests (run `npm run build` first; first time:
+                         # `npx playwright install chromium`)
+```
+
+`.github/workflows/ci.yml` runs lint → typecheck → prisma:validate → verify → build, then the Playwright job, on every pull request and on pushes to `main`.
+
+---
+
+## Production Database Notes
+
+- **Prefer `DATABASE_URL`** (Supabase transaction pooler). The PostgREST adapter (`packages/shared/src/db-adapter/`) keeps a short-lived in-memory snapshot of every table and re-downloads it on cache misses. Large digest email bodies (`EmailDigestLog.htmlPreview`) are left out and loaded on demand. Cost still grows with total data, not per-request data.
+- The adapter's `$transaction` is **compensating, not atomic**. PostgREST can't hold a transaction open, so on failure the completed steps are undone in reverse order, and other readers can briefly see intermediate states.
+
+---
+
+## Data Privacy & Student Records
+
+- **Never commit real student data** (names, student numbers, APC emails) to this repository. `supabase/*_students.sql` is git-ignored. Use the Teacher Portal roster import, or a local copy of `supabase/students.example.sql`.
+- Seed data, templates, tests and UI placeholders use fictional people and `2099-…` student numbers.
+- A real roster was committed in earlier history. Purging it is a coordinated history rewrite: [`docs/maintenance/purge-roster-history.md`](docs/maintenance/purge-roster-history.md).
 
 ---
 
