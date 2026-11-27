@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { LayoutGrid, RefreshCw, Type } from "lucide-react";
+import { getQuestDeadlineState } from "../deadline";
 import type { QuestCategoryValue, SubmissionStatusValue } from "../types";
 import { RizalMonumentWatermark } from "./RizalMonumentWatermark";
 import { RizalStampCircle } from "./RizalStampCircle";
@@ -289,9 +290,9 @@ export function RizalQuestCardBoard({
           >
             {quests.map((q) => {
               const status = statusByQuestId.get(q.id) ?? "NOT_STARTED";
-              const isOverdue = Boolean(
-                q.deadline && new Date(q.deadline).getTime() < nowMs
-              );
+              const isOverdue =
+                getQuestDeadlineState(q.deadline, status, new Date(nowMs)).kind ===
+                "OVERDUE";
               return (
                 <RizalStampCircle
                   key={q.id}

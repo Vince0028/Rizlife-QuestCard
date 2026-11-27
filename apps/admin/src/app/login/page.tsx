@@ -17,6 +17,13 @@ export default async function AdminLoginPage({
     sso_account_not_provisioned:
       "Your Microsoft account does not have Administrator access.",
     sso_failed: "Microsoft sign-in could not be completed. Please try again.",
+    sso_cancelled: "Microsoft sign-in was cancelled.",
+    sso_missing_code: "Microsoft did not return a sign-in code. Please try again.",
+    sso_state_mismatch:
+      "Your Microsoft sign-in expired or was started in another tab. Please try again.",
+    sso_domain_not_allowed: "Use your APC Microsoft account (@apc.edu.ph).",
+    sso_account_conflict:
+      "This account is linked to a different Microsoft account. Sign in with your password, or contact another RizLife administrator.",
   };
 
   return (
@@ -27,7 +34,11 @@ export default async function AdminLoginPage({
       defaultDemoEmail="admin@apc.edu.ph"
       defaultDemoPassword="Admin@RizLife2026"
       microsoftSsoConfigured={isMicrosoftSsoConfigured()}
-      initialError={params.error ? errorMap[params.error] || params.error : null}
+      initialError={
+        params.error
+          ? errorMap[params.error] ?? "Sign-in could not be completed. Please try again."
+          : null
+      }
     />
   );
 }
