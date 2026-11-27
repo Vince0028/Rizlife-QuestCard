@@ -352,11 +352,25 @@ export function generateTrackerCsv(params: {
   return lines.join("\r\n");
 }
 
-function parseCsvLines(text: string): string[][] {
-  const rows: string[][] = [];
+interface SourceRow {
+  cells: string[];
+  /** 1-based line (CSV) or sheet row (XLSX) where this record starts. */
+  rowNumber: number;
+}
+
+function parseCsvLines(text: string): SourceRow[] {
+  const rows: SourceRow[] = [];
   let row: string[] = [];
   let current = "";
   let inQuotes = false;
+  let line = 1;
+  let rowStart = 1;
+  const endRow = () => {
+    row.push(current.trim());
+    if (row.some((c) => c.length > 0)) rows.push({ cells: row, rowNumber: rowStart });
+    row = [];
+    current = "";
+  };
 
   const cleanText = text.replace(/^\uFEFF/, "");
 
@@ -365,6 +379,7 @@ function parseCsvLines(text: string): string[][] {
     const next = cleanText[i + 1];
 
     if (inQuotes) {
+      if (ch === "\n") line += 1; // a newline inside a quoted cell still advances the file line
       if (ch === '"' && next === '"') {
         current += '"';
         i += 1;
@@ -380,26 +395,21 @@ function parseCsvLines(text: string): string[][] {
         row.push(current.trim());
         current = "";
       } else if (ch === "\r" && next === "\n") {
-        row.push(current.trim());
-        if (row.some((c) => c.length > 0)) rows.push(row);
-        row = [];
-        current = "";
+        endRow();
         i += 1;
+        line += 1;
+        rowStart = line;
       } else if (ch === "\n" || ch === "\r") {
-        row.push(current.trim());
-        if (row.some((c) => c.length > 0)) rows.push(row);
-        row = [];
-        current = "";
+        endRow();
+        line += 1;
+        rowStart = line;
       } else {
         current += ch;
       }
     }
   }
 
-  if (current.length > 0 || row.length > 0) {
-    row.push(current.trim());
-    if (row.some((c) => c.length > 0)) rows.push(row);
-  }
+  if (current.length > 0 || row.length > 0) endRow();
 
   return rows;
 }
@@ -424,7 +434,7 @@ export async function parseStudentImportFile(
   buffer: Buffer,
   filename: string
 ): Promise<StudentImportParseResult> {
-  let matrix: string[][] = [];
+  let matrix: SourceRow[] = [];
 
   if (filename.toLowerCase().endsWith(".xlsx")) {
     const wb = new ExcelJS.Workbook();
@@ -442,7 +452,7 @@ export async function parseStudentImportFile(
         cells[colNumber - 1] = cellToString(cell.value);
       });
       if (cells.some((c) => c.length > 0)) {
-        matrix.push(cells);
+        matrix.push({ cells, rowNumber: row.number });
       }
     });
   } else {
@@ -461,7 +471,7 @@ export async function parseStudentImportFile(
     };
   }
 
-  const headers = matrix[0].map(normalizeHeader);
+  const headers = matrix[0].cells.map(normalizeHeader);
   const idx = {
     studentId: headers.findIndex((h) =>
       ["studentid", "id", "studentnumber", "idnumber"].includes(h)
@@ -501,8 +511,7 @@ export async function parseStudentImportFile(
   const errors: { rowNumber: number; message: string }[] = [];
 
   for (let r = 1; r < matrix.length; r++) {
-    const line = matrix[r];
-    const rowNumber = r + 1;
+    const { cells: line, rowNumber } = matrix[r];
     const studentId = (line[idx.studentId] ?? "").trim();
     const lastName = (line[idx.lastName] ?? "").trim();
     const firstName = (line[idx.firstName] ?? "").trim();
@@ -528,6 +537,7 @@ export async function parseStudentImportFile(
     }
 
     rows.push({
+      rowNumber,
       studentId,
       lastName,
       firstName,

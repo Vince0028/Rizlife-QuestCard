@@ -66,6 +66,8 @@ model Section {
   leaderboardVisible Boolean   @default(false)
   digestThreshold    Int       @default(20)
   digestEnabled      Boolean   @default(true)
+  /// Start of the latest digest *attempt* (atomic claim + cooldown marker, see digest.ts).
+  /// The last successfully emailed digest is the newest EmailDigestLog with deliveryStatus SENT.
   lastDigestSentAt   DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

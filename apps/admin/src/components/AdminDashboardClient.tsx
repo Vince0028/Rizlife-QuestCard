@@ -16,6 +16,7 @@ import {
   Wrench,
 } from "lucide-react";
 import {
+  apiFetch,
   ConfirmDialog,
   LamparillaWreathWatermark,
   ModalDrawer,
@@ -25,7 +26,12 @@ import {
   TeacherWorkspace,
   VintageShell,
 } from "@rizlife/shared/ui";
-import type { RoleValue, SessionPayload } from "@rizlife/shared/types";
+import {
+  DIGEST_CRON_SCHEDULE_UTC,
+  DIGEST_SCHEDULE_LABEL,
+  type RoleValue,
+  type SessionPayload,
+} from "@rizlife/shared/types";
 import type {
   AdminUserRow,
   AdminSectionRow,
@@ -137,9 +143,9 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const loadOverview = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/overview");
+      const res = await apiFetch("/api/admin/overview");
       if (res.ok) {
-        const json = (await res.json()) as AdminOverviewResponse;
+        const json = res.data as AdminOverviewResponse;
         setData(json);
         setSettingsForm(json.settings);
         setSecTerm(json.settings.activeTerm);
@@ -176,7 +182,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     e.preventDefault();
     setCreateUserBusy(true);
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await apiFetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -192,7 +198,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           assignSectionIds: newRole === "TEACHER" ? assignSectionIds : undefined,
         }),
       });
-      const json = await res.json();
+      const json = res.data;
       if (!res.ok) {
         showToast("err", json.error || "Failed to create account.");
         return;
@@ -237,7 +243,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${editUserTarget.id}`, {
+        const res = await apiFetch(`/api/admin/users/${editUserTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -250,7 +256,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             courseCode: editUserRole === "STUDENT" ? editUserCourse || null : null,
           }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Could not update user.");
           return;
@@ -273,12 +279,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: nextActive ? "Yes, Activate" : "Yes, Deactivate",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${target.id}`, {
+        const res = await apiFetch(`/api/admin/users/${target.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ isActive: nextActive }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Could not update user.");
           return;
@@ -300,10 +306,10 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Yes, Delete Account",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${target.id}`, {
+        const res = await apiFetch(`/api/admin/users/${target.id}`, {
           method: "DELETE",
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Could not delete user.");
           return;
@@ -325,12 +331,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Yes, Reset Password",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${target.id}/reset-password`, {
+        const res = await apiFetch(`/api/admin/users/${target.id}/reset-password`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ newPassword: resetPwValue }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Password reset failed.");
           return;
@@ -344,7 +350,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
 
   async function handleCreateSection(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch("/api/workspace/sections", {
+    const res = await apiFetch("/api/workspace/sections", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -354,7 +360,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
         teacherId: secTeacherId || null,
       }),
     });
-    const json = await res.json();
+    const json = res.data;
     if (!res.ok) {
       showToast("err", json.error || "Failed to create section.");
       return;
@@ -368,7 +374,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   async function handleReassignTeacher(sectionId: string, teacherId: string) {
-    const res = await fetch(`/api/workspace/sections/${sectionId}`, {
+    const res = await apiFetch(`/api/workspace/sections/${sectionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teacherId: teacherId || null }),
@@ -401,7 +407,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`/api/workspace/sections/${editSecTarget.id}`, {
+        const res = await apiFetch(`/api/workspace/sections/${editSecTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -412,7 +418,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             digestThreshold: Number(editSecThreshold),
           }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Failed to update section.");
           return;
@@ -434,7 +440,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Yes, Delete Section",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/sections/${sec.id}`, {
+        const res = await apiFetch(`/api/admin/sections/${sec.id}`, {
           method: "DELETE",
         });
         if (res.ok) {
@@ -461,12 +467,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       onConfirm: async () => {
         setSettingsBusy(true);
         try {
-          const res = await fetch("/api/admin/settings", {
+          const res = await apiFetch("/api/admin/settings", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(settingsForm),
           });
-          const json = await res.json();
+          const json = res.data;
           if (!res.ok) {
             showToast("err", json.error || "Failed to save system settings.");
           } else {
@@ -481,7 +487,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await apiFetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
 
@@ -673,9 +679,11 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                           : "border-[#D4AB50] bg-[#FEF3C7] text-[#78350F]"
                       }`}
                     >
-                      {data.envStatus.microsoftSsoConfigured
-                        ? "Connected"
-                        : "Awaiting IT Tenant Keys"}
+                      {!data.envStatus.microsoftSsoConfigured
+                        ? "Awaiting IT Tenant Keys"
+                        : data.settings.microsoftSsoEnabled
+                        ? "On"
+                        : "Configured, Off"}
                     </span>
                   </div>
                 </div>
@@ -984,7 +992,48 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                   <option value="resend">Resend API</option>
                   <option value="smtp">SMTP / Outlook Relay</option>
                 </select>
+                {settingsForm.emailProvider === "resend" && !data.envStatus.resendConfigured && (
+                  <p className="mt-1 text-[11px] font-semibold text-[#A92B2C]">
+                    RESEND_API_KEY isn&apos;t set on this deployment: digests will fail and stay queued.
+                  </p>
+                )}
+                {settingsForm.emailProvider === "smtp" && !data.envStatus.smtpConfigured && (
+                  <p className="mt-1 text-[11px] font-semibold text-[#A92B2C]">
+                    SMTP_HOST / SMTP_USER / SMTP_PASS aren&apos;t all set: digests will fail and stay queued.
+                  </p>
+                )}
               </div>
+
+              <div>
+                <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                  Scheduled Digest
+                </span>
+                <div className="folio-tonal px-3 py-2 text-xs text-[#16192C]">
+                  {DIGEST_SCHEDULE_LABEL}{" "}
+                  <span className="font-mono text-[10px] text-[#5E5246]">
+                    (cron {DIGEST_CRON_SCHEDULE_UTC} UTC, set in apps/teacher/vercel.json)
+                  </span>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2.5 text-xs text-[#16192C]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={settingsForm.microsoftSsoEnabled}
+                  onChange={(e) =>
+                    setSettingsForm({ ...settingsForm, microsoftSsoEnabled: e.target.checked })
+                  }
+                />
+                <span>
+                  <span className="font-bold">Allow &quot;Sign in with APC Microsoft Account&quot;</span>
+                  <span className="block text-[11px] text-[#5E5246]">
+                    {data.envStatus.microsoftSsoConfigured
+                      ? "Entra ID keys are configured. This switch shows or hides the button on all 3 portals."
+                      : "Has no effect until IT provides the AZURE_AD_* keys for this deployment."}
+                  </span>
+                </span>
+              </label>
 
               <button
                 type="submit"

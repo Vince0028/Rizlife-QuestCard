@@ -12,6 +12,7 @@ import { isMicrosoftSsoConfigured } from "../microsoft-sso";
 import {
   MICROSOFT_SSO_STATE_COOKIES,
   getMicrosoftLoginRedirectUrl,
+  isMicrosoftSsoEnabled,
   performMicrosoftCallback,
 } from "../portal-auth";
 import type { PortalKey } from "../types";
@@ -56,7 +57,7 @@ async function fakeMicrosoftFetch(input: unknown, init?: RequestInit): Promise<R
 
 /** Simulates: click "Sign in with Microsoft" -> Microsoft redirects back with ?code&state. */
 async function signIn(portal: PortalKey, msUser: FakeMsUser, tamper?: { state?: string | null; cookie?: string | undefined }) {
-  const start = getMicrosoftLoginRedirectUrl(ORIGINS[portal], portal);
+  const start = await getMicrosoftLoginRedirectUrl(ORIGINS[portal], portal);
   assert.ok(start.ok && start.url && start.stateCookie, "SSO login URL should be issued");
   const authorize = new URL(start.url);
   assert.equal(authorize.searchParams.get("redirect_uri"), `${ORIGINS[portal]}/api/auth/microsoft/callback`);
@@ -94,7 +95,38 @@ export async function runMicrosoftSsoChecks() {
   console.warn = () => {};
   console.error = () => {};
 
+  const savedSetting = await prisma.systemSetting.findUnique({ where: { id: "global" } });
+  await prisma.systemSetting.upsert({
+    where: { id: "global" },
+    update: { microsoftSsoEnabled: true },
+    create: { id: "global", microsoftSsoEnabled: true },
+  });
+
   try {
+    // Admin switch: with SSO configured but turned off, no sign-in starts or completes.
+    {
+      await prisma.systemSetting.update({ where: { id: "global" }, data: { microsoftSsoEnabled: false } });
+      const blocked = await getMicrosoftLoginRedirectUrl(ORIGINS.student, "student");
+      assert.equal(blocked.ok, false);
+      assert.equal(blocked.error, "sso_disabled");
+      assert.equal(await isMicrosoftSsoEnabled(), false);
+      await prisma.systemSetting.update({ where: { id: "global" }, data: { microsoftSsoEnabled: true } });
+      assert.equal(await isMicrosoftSsoEnabled(), true);
+
+      // A sign-in started while enabled is refused at the callback once switched off.
+      const start = await getMicrosoftLoginRedirectUrl(ORIGINS.student, "student");
+      await prisma.systemSetting.update({ where: { id: "global" }, data: { microsoftSsoEnabled: false } });
+      const late = await performMicrosoftCallback({
+        code: "irrelevant",
+        state: new URL(start.url!).searchParams.get("state"),
+        stateCookieValue: start.stateCookie!.value,
+        origin: ORIGINS.student,
+        portal: "student",
+      });
+      assert.equal(errorOf(late.redirectPath), "sso_disabled");
+      await prisma.systemSetting.update({ where: { id: "global" }, data: { microsoftSsoEnabled: true } });
+    }
+
     const student = await prisma.user.create({
       data: { firstName: "Sso", lastName: "Student", email: "sso.student@student.apc.edu.ph", role: "STUDENT", studentId: "2099-990001" },
     });
@@ -197,7 +229,7 @@ export async function runMicrosoftSsoChecks() {
       assert.equal(errorOf(noCookie.result.redirectPath), "sso_state_mismatch");
       const forged = await signIn("student", { oid: "oid-student", mail: "sso.student@student.apc.edu.ph" }, { state: "student:attacker" });
       assert.equal(errorOf(forged.result.redirectPath), "sso_state_mismatch");
-      const teacherStart = getMicrosoftLoginRedirectUrl(ORIGINS.teacher, "teacher");
+      const teacherStart = await getMicrosoftLoginRedirectUrl(ORIGINS.teacher, "teacher");
       const crossPortal = await signIn(
         "student",
         { oid: "oid-student", mail: "sso.student@student.apc.edu.ph" },
@@ -218,8 +250,12 @@ export async function runMicrosoftSsoChecks() {
     // Multi-tenant authorities are refused (email linking would allow account takeover).
     process.env.AZURE_AD_TENANT_ID = "common";
     assert.equal(isMicrosoftSsoConfigured(), false);
-    assert.equal(getMicrosoftLoginRedirectUrl(ORIGINS.student, "student").ok, false);
+    assert.equal((await getMicrosoftLoginRedirectUrl(ORIGINS.student, "student")).ok, false);
   } finally {
+    await prisma.systemSetting.update({
+      where: { id: "global" },
+      data: { microsoftSsoEnabled: savedSetting?.microsoftSsoEnabled ?? false },
+    });
     globalThis.fetch = savedFetch;
     console.warn = savedLog.warn;
     console.error = savedLog.error;

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import {
   submitStudentQuest,
   toWorkspaceError,
@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
     const { urlCheck, submission: updated } = await submitStudentQuest({
       studentUserId: session.userId,
       rawBody: body,
+      // The threshold digest (possibly an SMTP/Resend call) runs after the response.
+      scheduleDigestCheck: (task) => after(task),
     });
 
     return NextResponse.json({

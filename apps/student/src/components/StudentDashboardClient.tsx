@@ -14,6 +14,7 @@ import {
   Trophy,
 } from "lucide-react";
 import {
+  apiFetch,
   ConfirmDialog,
   LamparillaWreathWatermark,
   ModalDrawer,
@@ -78,9 +79,9 @@ export function StudentDashboardClient({
       const qs = targetSectionId
         ? `?sectionId=${encodeURIComponent(targetSectionId)}`
         : "";
-      const res = await fetch(`/api/questcard${qs}`);
+      const res = await apiFetch(`/api/questcard${qs}`);
       if (res.ok) {
-        const json = (await res.json()) as QuestCardApiResponse;
+        const json = res.data as QuestCardApiResponse;
         setData(json);
         if (json.activeSection) {
           setSectionId(json.activeSection.id);
@@ -193,7 +194,7 @@ export function StudentDashboardClient({
     setSubmitBusy(true);
     setSubmitFeedback(null);
     try {
-      const res = await fetch("/api/submissions", {
+      const res = await apiFetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -202,7 +203,7 @@ export function StudentDashboardClient({
           studentNote: noteInput,
         }),
       });
-      const json = await res.json();
+      const json = res.data;
       if (!res.ok) {
         setSubmitFeedback({
           type: "err",
@@ -229,7 +230,7 @@ export function StudentDashboardClient({
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await apiFetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
 
@@ -982,7 +983,7 @@ export function StudentDashboardClient({
                 setTrackSelectionBusy(true);
                 setTrackError(null);
                 try {
-                  const res = await fetch("/api/finals-track", {
+                  const res = await apiFetch("/api/finals-track", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -990,7 +991,7 @@ export function StudentDashboardClient({
                       finalsTrack: "SYSTEM",
                     }),
                   });
-                  const json = await res.json().catch(() => ({}));
+                  const json = res.data;
                   if (!res.ok) {
                     setTrackError(json.error || "Failed to update track. Please try again.");
                     return;
@@ -1032,7 +1033,7 @@ export function StudentDashboardClient({
                 setTrackSelectionBusy(true);
                 setTrackError(null);
                 try {
-                  const res = await fetch("/api/finals-track", {
+                  const res = await apiFetch("/api/finals-track", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -1040,7 +1041,7 @@ export function StudentDashboardClient({
                       finalsTrack: "OPENLEARNING_MODULE",
                     }),
                   });
-                  const json = await res.json().catch(() => ({}));
+                  const json = res.data;
                   if (!res.ok) {
                     setTrackError(json.error || "Failed to update track. Please try again.");
                     return;

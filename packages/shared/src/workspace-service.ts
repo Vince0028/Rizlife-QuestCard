@@ -23,17 +23,84 @@ import {
 } from "./validation";
 import type { RoleValue, SessionPayload, SubmissionStatusValue } from "./types";
 
+const GENERIC_SERVER_ERROR =
+  "Something went wrong on the server. Please try again, or contact the RizLife administrator if it keeps happening.";
+
+/**
+ * Maps a thrown error to an HTTP status + client-safe message. Errors thrown on purpose
+ * carry `status` and a user-facing message. Prisma (and adapter) constraint errors map
+ * to 404/409. Anything else is logged server-side and returned as a generic 500, so
+ * database or internal details never reach the browser.
+ */
 export function toWorkspaceError(err: unknown): { status: number; message: string } {
-  const status =
-    typeof err === "object" &&
-    err !== null &&
-    "status" in err &&
-    typeof (err as { status: unknown }).status === "number"
-      ? (err as { status: number }).status
-      : 500;
-  const message =
-    err instanceof Error ? err.message : "Unexpected workspace error.";
-  return { status, message };
+  const e = (typeof err === "object" && err !== null ? err : {}) as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+  };
+  if (typeof e.status === "number" && e.status >= 400 && e.status < 500) {
+    return {
+      status: e.status,
+      message: typeof e.message === "string" ? e.message : "Request failed.",
+    };
+  }
+  if (e.code === "P2002") {
+    return { status: 409, message: "A record with these details already exists." };
+  }
+  if (e.code === "P2025") {
+    return { status: 404, message: "That record no longer exists. Refresh and try again." };
+  }
+  if (e.code === "P2003") {
+    return {
+      status: 409,
+      message: "This change conflicts with related records. Refresh and try again.",
+    };
+  }
+  console.error("[RizLife] Unhandled workspace error:", err);
+  return { status: 500, message: GENERIC_SERVER_ERROR };
+}
+
+/** Thrown for request problems the user can fix (default 400). */
+export function clientError(message: string, status = 400) {
+  return Object.assign(new Error(message), { status });
+}
+
+/** The global allowed student email domain (Admin settings), e.g. "student.apc.edu.ph". */
+async function getAllowedStudentDomain(): Promise<string> {
+  const settings = await prisma.systemSetting.findUnique({ where: { id: "global" } });
+  return (settings?.allowedStudentDomain ?? "student.apc.edu.ph")
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, "");
+}
+
+function parseOptionalDate(value: string | null | undefined, label: string): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) throw clientError(`${label} is not a valid date.`);
+  return d;
+}
+
+function assertDateOrder(start: Date | null, deadline: Date | null) {
+  if (start && deadline && deadline.getTime() < start.getTime()) {
+    throw clientError("The deadline can't be before the start date.");
+  }
+}
+
+/**
+ * Teachers may only manage students enrolled in their own sections. A student who is
+ * also enrolled in another teacher's (or an unassigned) section is "shared": their
+ * password, email and Student ID can only be changed by an admin.
+ */
+async function getStudentScopeForTeacher(targetId: string, actor: SessionPayload) {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { studentId: targetId },
+    include: { section: { select: { teacherId: true } } },
+  });
+  return {
+    inMySection: enrollments.some((e) => e.section.teacherId === actor.userId),
+    shared: enrollments.some((e) => e.section.teacherId !== actor.userId),
+  };
 }
 
 export async function assertSectionAccess(
@@ -84,7 +151,7 @@ export async function getSectionWorkspaceData(
 ) {
   const section = await assertSectionAccess(sectionId, user);
 
-  const [quests, enrollments, submissions, digestQueue, digestLogs] =
+  const [quests, enrollments, submissions, digestQueue, digestLogs, lastSentLog] =
     await Promise.all([
       prisma.quest.findMany({
         where: { sectionId },
@@ -146,6 +213,11 @@ export async function getSectionWorkspaceData(
           sentAt: true,
         },
       }),
+      prisma.emailDigestLog.findFirst({
+        where: { sectionId, deliveryStatus: "SENT" },
+        orderBy: { sentAt: "desc" },
+        select: { sentAt: true },
+      }),
     ]);
 
   const students = enrollments.map((e) => ({
@@ -188,9 +260,8 @@ export async function getSectionWorkspaceData(
       leaderboardVisible: section.leaderboardVisible,
       digestThreshold: section.digestThreshold,
       digestEnabled: section.digestEnabled,
-      lastDigestSentAt: section.lastDigestSentAt
-        ? section.lastDigestSentAt.toISOString()
-        : null,
+      // Latest digest actually emailed (Section.lastDigestSentAt is the last *attempt*).
+      lastDigestSentAt: lastSentLog ? lastSentLog.sentAt.toISOString() : null,
     },
     quests: quests.map((q) => ({
       id: q.id,
@@ -340,6 +411,22 @@ export async function createManagedQuest(
   });
 
   const taskNumber = parsed.data.taskNumber ?? (maxQuest?.taskNumber ?? 0) + 1;
+  if (parsed.data.taskNumber !== undefined) {
+    const clash = await prisma.quest.findFirst({
+      where: { sectionId: parsed.data.sectionId, taskNumber },
+      select: { id: true },
+    });
+    if (clash) {
+      throw clientError(
+        `Task #${taskNumber} already exists in this section. Pick another number.`,
+        409
+      );
+    }
+  }
+
+  const startDate = parseOptionalDate(parsed.data.startDate, "Start date");
+  const deadline = parseOptionalDate(parsed.data.deadline, "Deadline");
+  assertDateOrder(startDate, deadline);
 
   return prisma.quest.create({
     data: {
@@ -349,8 +436,8 @@ export async function createManagedQuest(
       description: parsed.data.description,
       category: parsed.data.category,
       openlearningUrl,
-      startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
-      deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
+      startDate,
+      deadline,
     },
   });
 }
@@ -391,6 +478,16 @@ export async function updateManagedQuest(
     }
   }
 
+  const startDate =
+    parsed.data.startDate !== undefined
+      ? parseOptionalDate(parsed.data.startDate, "Start date")
+      : existing.startDate;
+  const deadline =
+    parsed.data.deadline !== undefined
+      ? parseOptionalDate(parsed.data.deadline, "Deadline")
+      : existing.deadline;
+  assertDateOrder(startDate, deadline);
+
   return prisma.quest.update({
     where: { id: questId },
     data: {
@@ -402,12 +499,8 @@ export async function updateManagedQuest(
         category: parsed.data.category,
       }),
       ...(parsed.data.openlearningUrl !== undefined && { openlearningUrl }),
-      ...(parsed.data.startDate !== undefined && {
-        startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
-      }),
-      ...(parsed.data.deadline !== undefined && {
-        deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
-      }),
+      ...(parsed.data.startDate !== undefined && { startDate }),
+      ...(parsed.data.deadline !== undefined && { deadline }),
     },
   });
 }
@@ -598,6 +691,11 @@ export async function reviewOrStampSubmission(
 export async function submitStudentQuest(params: {
   studentUserId: string;
   rawBody: unknown;
+  /**
+   * Runs the threshold-digest check outside the request (the student route passes
+   * Next's `after`), so the student never waits on SMTP/Resend. Default: run inline.
+   */
+  scheduleDigestCheck?: (task: () => Promise<void>) => void;
 }) {
   const parsed = submitQuestSchema.safeParse(params.rawBody);
   if (!parsed.success) {
@@ -683,7 +781,9 @@ export async function submitStudentQuest(params: {
     },
   });
 
-  await maybeTriggerThresholdDigest(quest.sectionId);
+  const digestCheck = () => maybeTriggerThresholdDigest(quest.sectionId);
+  if (params.scheduleDigestCheck) params.scheduleDigestCheck(digestCheck);
+  else await digestCheck();
 
   return { urlCheck, submission };
 }
@@ -713,23 +813,38 @@ export async function createOrEnrollStudent(
 
   await assertSectionAccess(sectionId, user);
 
+  const allowedDomain = await getAllowedStudentDomain();
+  if (email.split("@")[1] !== allowedDomain) {
+    throw clientError(`Student emails must use @${allowedDomain}.`);
+  }
+
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
   const existingByNumber = await prisma.user.findUnique({
     where: { studentId },
   });
 
-  if (
-    existingByEmail &&
-    existingByNumber &&
-    existingByEmail.id !== existingByNumber.id
-  ) {
-    throw Object.assign(
-      new Error("Student ID and APC email belong to different existing accounts."),
-      { status: 409 }
-    );
+  // An existing account is only linked when the Student ID *and* the APC email both
+  // point at it. A partial match is usually a typo, and linking on it would enroll (and
+  // hand roster control over) a different student.
+  if (existingByEmail || existingByNumber) {
+    if (existingByEmail && existingByNumber && existingByEmail.id !== existingByNumber.id) {
+      throw clientError("Student ID and APC email belong to different existing accounts.", 409);
+    }
+    if (!existingByNumber) {
+      throw clientError(
+        "This APC email is already registered with a different Student ID. Check both values, or ask an administrator to correct the existing account.",
+        409
+      );
+    }
+    if (!existingByEmail) {
+      throw clientError(
+        "This Student ID is already registered to a different APC email. Check both values, or ask an administrator to correct the existing account.",
+        409
+      );
+    }
   }
 
-  let studentUser = existingByEmail || existingByNumber;
+  let studentUser = existingByEmail;
   let created = false;
   const assignedPassword =
     defaultPassword || generateDefaultPassword(studentId);
@@ -795,11 +910,11 @@ export async function bulkImportStudentsForSection(params: {
 
   let createdCount = 0;
   let enrolledExistingCount = 0;
-  let skippedCount = 0;
+  // Rows the parser already rejected (missing fields, bad email) count as skipped too.
+  let skippedCount = parsed.errors.length;
   const rowErrors = [...parsed.errors];
 
-  for (let i = 0; i < parsed.rows.length; i++) {
-    const row = parsed.rows[i];
+  for (const row of parsed.rows) {
     try {
       const res = await createOrEnrollStudent(
         {
@@ -820,20 +935,18 @@ export async function bulkImportStudentsForSection(params: {
     } catch (err) {
       skippedCount += 1;
       rowErrors.push({
-        rowNumber: i + 2,
-        message: `${row.email}: ${
-          err instanceof Error ? err.message : "Failed to import"
-        }`,
+        rowNumber: row.rowNumber,
+        message: `${row.email}: ${toWorkspaceError(err).message}`,
       });
     }
   }
 
   return {
-    totalParsed: parsed.rows.length,
+    totalParsed: parsed.rows.length + parsed.errors.length,
     createdCount,
     enrolledExistingCount,
     skippedCount,
-    errors: rowErrors,
+    errors: rowErrors.sort((a, b) => a.rowNumber - b.rowNumber),
   };
 }
 
@@ -859,21 +972,16 @@ export async function resetManagedUserPassword(params: {
 
   if ((params.actor.role as RoleValue) !== "ADMIN") {
     if (target.role !== "STUDENT") {
-      throw Object.assign(
-        new Error("Teachers can only reset passwords for student accounts."),
-        { status: 403 }
-      );
+      throw clientError("Teachers can only reset passwords for student accounts.", 403);
     }
-    const enrollment = await prisma.enrollment.findFirst({
-      where: {
-        studentId: target.id,
-        section: { teacherId: params.actor.userId },
-      },
-    });
-    if (!enrollment) {
-      throw Object.assign(
-        new Error("Student is not enrolled in one of your sections."),
-        { status: 403 }
+    const scope = await getStudentScopeForTeacher(target.id, params.actor);
+    if (!scope.inMySection) {
+      throw clientError("Student is not enrolled in one of your sections.", 403);
+    }
+    if (scope.shared) {
+      throw clientError(
+        "This student is also enrolled in another section, so only an administrator can reset their password.",
+        403
       );
     }
   }
@@ -933,22 +1041,27 @@ export async function updateManagedStudent(params: {
 
   if ((params.actor.role as RoleValue) !== "ADMIN") {
     if (target.role !== "STUDENT") {
-      throw Object.assign(
-        new Error("Teachers can only edit student accounts."),
-        { status: 403 }
+      throw clientError("Teachers can only edit student accounts.", 403);
+    }
+    const scope = await getStudentScopeForTeacher(target.id, params.actor);
+    if (!scope.inMySection) {
+      throw clientError("Student is not enrolled in one of your sections.", 403);
+    }
+    const changesIdentity =
+      (parsed.data.email !== undefined && parsed.data.email !== target.email) ||
+      (parsed.data.studentId !== undefined &&
+        (parsed.data.studentId || null) !== target.studentId);
+    if (scope.shared && changesIdentity) {
+      throw clientError(
+        "This student is also enrolled in another section, so only an administrator can change their APC email or Student ID.",
+        403
       );
     }
-    const enrollment = await prisma.enrollment.findFirst({
-      where: {
-        studentId: target.id,
-        section: { teacherId: params.actor.userId },
-      },
-    });
-    if (!enrollment) {
-      throw Object.assign(
-        new Error("Student is not enrolled in one of your sections."),
-        { status: 403 }
-      );
+    if (parsed.data.email !== undefined && parsed.data.email !== target.email) {
+      const allowedDomain = await getAllowedStudentDomain();
+      if (parsed.data.email.split("@")[1] !== allowedDomain) {
+        throw clientError(`Student emails must use @${allowedDomain}.`);
+      }
     }
   }
 
@@ -1030,12 +1143,19 @@ export async function updateEnrollmentTrack(params: {
     params.finalsTrack === "OPENLEARNING_MODULE"
       ? params.assignedModuleTitle?.trim() || null
       : null;
-  const url =
+  let url =
     params.finalsTrack === "OPENLEARNING_MODULE"
       ? params.assignedModuleUrl?.trim() || null
       : null;
+  if (url) {
+    const check = validateSubmissionUrl(url);
+    if (!check.valid || !check.normalizedUrl) {
+      throw clientError(check.error || "Enter a valid module link (https://...).");
+    }
+    url = check.normalizedUrl;
+  }
 
-  await prisma.enrollment.updateMany({
+  const { count } = await prisma.enrollment.updateMany({
     where: {
       sectionId: params.sectionId,
       studentId: { in: params.studentIds },
@@ -1049,10 +1169,38 @@ export async function updateEnrollmentTrack(params: {
 
   return {
     success: true,
-    count: params.studentIds.length,
+    count,
     finalsTrack: params.finalsTrack,
     assignedModuleTitle: title,
     assignedModuleUrl: url,
+  };
+}
+
+/**
+ * Student picks their Finals track (POST /api/finals-track on the student portal).
+ * Only `finalsTrack` changes: a module the teacher assigned stays on the enrollment,
+ * so switching SYSTEM -> back to the module track doesn't lose it.
+ */
+export async function chooseStudentFinalsTrack(params: {
+  studentUserId: string;
+  sectionId: string;
+  finalsTrack: "SYSTEM" | "OPENLEARNING_MODULE";
+}) {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: {
+      studentId_sectionId: { studentId: params.studentUserId, sectionId: params.sectionId },
+    },
+  });
+  if (!enrollment) throw clientError("You are not enrolled in this section.", 404);
+
+  const updated = await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: { finalsTrack: params.finalsTrack },
+  });
+  return {
+    track: updated.finalsTrack,
+    assignedModuleTitle: updated.assignedModuleTitle,
+    assignedModuleUrl: updated.assignedModuleUrl,
   };
 }
 

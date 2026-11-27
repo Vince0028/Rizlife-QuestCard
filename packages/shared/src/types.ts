@@ -121,7 +121,16 @@ export interface DigestQueueSummary {
   htmlPreview: string;
 }
 
+/**
+ * Scheduled digest cron. Must match apps/teacher/vercel.json (checked by `npm run verify`).
+ * Vercel cron runs in UTC: 00:00 and 09:00 UTC = 08:00 and 17:00 Philippine time.
+ */
+export const DIGEST_CRON_SCHEDULE_UTC = "0 0,9 * * *";
+export const DIGEST_SCHEDULE_LABEL = "Daily at 08:00 and 17:00 Philippine time";
+
 export interface StudentImportRow {
+  /** 1-based row/line in the uploaded file (for error messages). */
+  rowNumber: number;
   studentId: string;
   lastName: string;
   firstName: string;

@@ -8,6 +8,7 @@
     "./password": "./src/password.ts",
     "./portal-auth": "./src/portal-auth.ts",
     "./workspace-service": "./src/workspace-service.ts",
+    "./admin-service": "./src/admin-service.ts",
     "./workspace-routes": "./src/workspace-routes.ts",
     "./portal-middleware": "./src/portal-middleware.ts",
     "./microsoft-sso": "./src/microsoft-sso.ts",

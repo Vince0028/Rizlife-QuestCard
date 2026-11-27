@@ -183,10 +183,22 @@ export const createUserAdminSchema = z.object({
   assignSectionIds: z.array(z.string().max(64)).max(100).optional(),
 });
 
+export const updateUserAdminSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required.").max(80).optional(),
+  middleName: z.string().trim().max(80).optional().nullable(),
+  lastName: z.string().trim().min(1, "Last name is required.").max(80).optional(),
+  email: z.string().trim().email("Enter a valid email address.").toLowerCase().optional(),
+  studentId: z.string().trim().max(40).optional().nullable(),
+  courseCode: z.string().trim().max(30).optional().nullable(),
+  role: z.enum(["STUDENT", "TEACHER", "ADMIN"]).optional(),
+  isActive: z.boolean().optional(),
+});
+
 export const systemSettingsSchema = z.object({
   activeTerm: z.string().trim().min(2).max(80),
   defaultDigestThreshold: z.coerce.number().int().min(1).max(200),
-  digestCronSchedule: z.string().trim().min(5).max(50),
+  /** Ignored on save: the schedule is fixed by apps/teacher/vercel.json. */
+  digestCronSchedule: z.string().trim().max(50).optional(),
   emailProvider: z.enum(["preview", "resend", "smtp"]),
   emailFromAddress: z.string().trim().min(3).max(160),
   allowedStudentDomain: z.string().trim().min(3).max(100).toLowerCase(),

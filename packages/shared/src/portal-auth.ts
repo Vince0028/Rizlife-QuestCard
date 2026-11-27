@@ -226,15 +226,35 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
 }
 
-export function getMicrosoftLoginRedirectUrl(
+/**
+ * Microsoft sign-in is offered only when the Entra ID app is configured (AZURE_AD_*
+ * env vars) AND an admin has switched it on (SystemSetting.microsoftSsoEnabled).
+ */
+export async function getMicrosoftSsoStatus(): Promise<
+  "enabled" | "not_configured" | "disabled"
+> {
+  if (!isMicrosoftSsoConfigured()) return "not_configured";
+  const settings = await prisma.systemSetting.findUnique({ where: { id: "global" } });
+  return settings?.microsoftSsoEnabled ? "enabled" : "disabled";
+}
+
+export async function isMicrosoftSsoEnabled(): Promise<boolean> {
+  return (await getMicrosoftSsoStatus()) === "enabled";
+}
+
+export async function getMicrosoftLoginRedirectUrl(
   origin: string,
   portal: PortalKey
-): { ok: boolean; url?: string; error?: string; stateCookie?: SsoCookie } {
-  if (!isMicrosoftSsoConfigured()) {
-    return {
-      ok: false,
-      error: "Microsoft Entra ID SSO is not yet configured.",
-    };
+): Promise<{
+  ok: boolean;
+  url?: string;
+  /** Login-page error code when !ok: "sso_not_configured" | "sso_disabled". */
+  error?: string;
+  stateCookie?: SsoCookie;
+}> {
+  const status = await getMicrosoftSsoStatus();
+  if (status !== "enabled") {
+    return { ok: false, error: status === "disabled" ? "sso_disabled" : "sso_not_configured" };
   }
 
   const attempt = createMicrosoftSsoAttempt(portal);
@@ -293,6 +313,11 @@ export async function performMicrosoftCallback(params: {
     return fail(params.providerError === "access_denied" ? "sso_cancelled" : "sso_failed");
   }
   if (!params.code) return fail("sso_missing_code");
+  // An admin may have switched SSO off after this sign-in started.
+  const ssoStatus = await getMicrosoftSsoStatus();
+  if (ssoStatus !== "enabled") {
+    return fail(ssoStatus === "disabled" ? "sso_disabled" : "sso_not_configured");
+  }
 
   // CSRF / login-fixation protection: the state must match the one this browser started.
   const [expectedState, codeVerifier] = (params.stateCookieValue ?? "").split("|");

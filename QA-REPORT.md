@@ -31,6 +31,27 @@
 
 ---
 
+## 0b. Status update (2026-11-27): hardening pass for M2, M6–M9, L2–L9, L11
+
+| Item | Status | Notes |
+|---|---|---|
+| **M2** Teacher enrollment scoping | ✅ Done | Existing accounts are linked only when the email **and** the Student ID both match. Teachers can't reset the password, email or Student ID of a student who is also in another teacher's section (admins can). |
+| **L4** Bulk import | ✅ Done | Errors cite the real file line or sheet row (including blank lines and quoted newlines). Parse errors count as skipped. `allowedStudentDomain` is enforced on create, import and edit. |
+| **M6** Unused settings | ✅ Done | `microsoftSsoEnabled` now gates the login button, the login start and the callback on all 3 portals. The digest schedule is shown read-only and pinned to `apps/teacher/vercel.json`; verify fails if the two drift apart. |
+| **M7** Digest provider fallback | ✅ Done | A missing Resend/SMTP key is now `FAILED` with a clear message. Only `SENT` takes submissions out of the queue. The teacher digest tab shows a warning banner and per-log errors; the admin settings show a warning for the missing key. |
+| **L7** Threshold digest | ✅ Done | Runs after the response via `after()`. An atomic per-section claim (`Section.lastDigestSentAt`) plus an in-process guard prevent double sends; a 15-minute threshold cooldown stops a retry storm against a failing provider. Tested with 5 concurrent triggers → 1 digest. |
+| **M8 / L9** Admin routes | ✅ Done | User updates validated with Zod. Self-demotion and removing the last active admin (by demotion, deactivation or deletion) are blocked. A missing section or user returns 404. |
+| **M9 / L5** Finals track | ✅ Done | A student's track choice no longer clears the teacher-assigned module. Module URLs must be http(s). |
+| **L2** Error leaks | ✅ Done | Unexpected errors return a generic 500 (details logged server-side). Prisma constraint codes map to 404/409. |
+| **L3** Invalid dates / duplicate task numbers | ✅ Done | Now 400/409 with readable messages. A deadline before the start date is rejected. |
+| **L6** Headers / CSRF | ✅ Done | `frame-ancestors 'none'`, `X-Frame-Options`, `nosniff`, `Referrer-Policy` and `Permissions-Policy` on all portals. Cross-origin POST/PATCH/DELETE to `/api/*` (including login) returns 403. A full script CSP is still to do (it needs nonces). |
+| **L8** Client fetch handling | ✅ Done | One `apiFetch` helper (never throws, safe JSON, always an `error` message) replaces 38 raw `fetch` calls in the teacher, admin and student UIs. |
+| **L11** Dead code / counts | ✅ Done | The unused URL normalisation was removed; `updateEnrollmentTrack` returns the real updated count. |
+
+Still open from §3: **H1–H4**, **M1** (cron endpoint is open when `CRON_SECRET` is unset), **M3**, **M4**, **M5**, **L1**, **L10**.
+
+---
+
 ## 1. Summary
 
 The project builds cleanly, type-checks in all four workspaces, and passes its verification suite. Access to teacher workspaces is checked the same way on every route, and the Microsoft SSO flow is carefully hardened.

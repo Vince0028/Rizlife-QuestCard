@@ -47,6 +47,7 @@ import {
 import { RizalQuestCardBoard } from "./RizalQuestCardBoard";
 import { StampCelebrationOverlay } from "./StampCelebrationOverlay";
 import { StatusBadge } from "./StatusBadge";
+import { apiFetch } from "./api-fetch";
 import type {
   WorkspaceSectionOption,
   WorkspaceQuestItem,
@@ -311,10 +312,10 @@ export function TeacherWorkspace({
   async function openDigestLogPreview(logId: string) {
     if (!workspace) return;
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${apiBase}/sections/${workspace.section.id}/digest-logs/${logId}`
       );
-      const data = await res.json().catch(() => ({}));
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Could not load that email.");
         return;
@@ -356,9 +357,9 @@ export function TeacherWorkspace({
   );
 
   const loadSectionsList = useCallback(async () => {
-    const res = await fetch(`${apiBase}/sections`);
+    const res = await apiFetch(`${apiBase}/sections`);
     if (res.ok) {
-      const data = await res.json();
+      const data = res.data;
       setSections(data.sections || []);
       if (!selectedSectionId && data.sections?.[0]?.id) {
         setSelectedSectionId(data.sections[0].id);
@@ -371,8 +372,8 @@ export function TeacherWorkspace({
       if (!secId) return;
       setLoading(true);
       try {
-        const res = await fetch(`${apiBase}/sections/${secId}`);
-        const data = (await res.json()) as WorkspacePayload & { error?: string };
+        const res = await apiFetch(`${apiBase}/sections/${secId}`);
+        const data = res.data as WorkspacePayload & { error?: string };
         if (!res.ok) {
           showToast("err", data.error || "Failed to load section workspace.");
           return;
@@ -586,7 +587,7 @@ export function TeacherWorkspace({
     setQueueBusyId(sub.id);
     try {
       const feedbackText = queueFeedbacks[sub.id] ?? "";
-      const res = await fetch(`${apiBase}/submissions/review`, {
+      const res = await apiFetch(`${apiBase}/submissions/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -596,7 +597,7 @@ export function TeacherWorkspace({
           teacherFeedback: feedbackText,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Action failed.");
       } else {
@@ -661,7 +662,7 @@ export function TeacherWorkspace({
     if (!activeStampCardStudent || !stampCardQuest) return;
     setStampCardBusy(true);
     try {
-      const res = await fetch(`${apiBase}/submissions/review`, {
+      const res = await apiFetch(`${apiBase}/submissions/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -672,7 +673,7 @@ export function TeacherWorkspace({
           submissionUrl: stampCardUrl,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Could not update stamp.");
         return;
@@ -758,7 +759,7 @@ export function TeacherWorkspace({
     const feedbackText = cellFeedback;
     setCellBusy(true);
     try {
-      const res = await fetch(`${apiBase}/submissions/review`, {
+      const res = await apiFetch(`${apiBase}/submissions/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -769,7 +770,7 @@ export function TeacherWorkspace({
           submissionUrl: cellUrl,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Failed to update submission.");
         return;
@@ -828,7 +829,7 @@ export function TeacherWorkspace({
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+        const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -838,7 +839,7 @@ export function TeacherWorkspace({
             ...(isAdminOverride ? { teacherId: editSecTeacherId || null } : {}),
           }),
         });
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Could not update section.");
           return;
@@ -861,10 +862,10 @@ export function TeacherWorkspace({
       confirmLabel: "Delete Section",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+        const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
           method: "DELETE",
         });
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Failed to delete section.");
           return;
@@ -881,7 +882,7 @@ export function TeacherWorkspace({
 
   async function handleCreateSection(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch(`${apiBase}/sections`, {
+    const res = await apiFetch(`${apiBase}/sections`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -891,7 +892,7 @@ export function TeacherWorkspace({
         ...(isAdminOverride ? { teacherId: newSecTeacherId || null } : {}),
       }),
     });
-    const data = await res.json();
+    const data = res.data;
     if (!res.ok) {
       showToast("err", data.error || "Could not create section.");
       return;
@@ -955,7 +956,7 @@ export function TeacherWorkspace({
         ? `${apiBase}/quests/${editingQuestId}`
         : `${apiBase}/quests`;
       const method = editingQuestId ? "PATCH" : "POST";
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -968,7 +969,7 @@ export function TeacherWorkspace({
           deadline: qDeadline ? new Date(qDeadline).toISOString() : null,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Failed to save quest.");
         return;
@@ -982,7 +983,7 @@ export function TeacherWorkspace({
   }
 
   async function handleReorderQuest(questId: string, direction: "UP" | "DOWN") {
-    const res = await fetch(`${apiBase}/quests/${questId}/reorder`, {
+    const res = await apiFetch(`${apiBase}/quests/${questId}/reorder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ direction }),
@@ -1001,7 +1002,7 @@ export function TeacherWorkspace({
       confirmLabel: "Yes, Delete Task",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/quests/${quest.id}`, {
+        const res = await apiFetch(`${apiBase}/quests/${quest.id}`, {
           method: "DELETE",
         });
         if (res.ok) {
@@ -1027,7 +1028,7 @@ export function TeacherWorkspace({
       confirmLabel: nextVal ? "Yes, Reveal Leaderboard" : "Yes, Hide Leaderboard",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+        const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ leaderboardVisible: nextVal }),
@@ -1050,7 +1051,7 @@ export function TeacherWorkspace({
     if (!workspace) return;
     setDigestBusy(true);
     try {
-      const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+      const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1058,7 +1059,7 @@ export function TeacherWorkspace({
           digestThreshold: Number(digestThresholdInput),
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Failed to update email settings.");
       } else {
@@ -1085,22 +1086,31 @@ export function TeacherWorkspace({
       onConfirm: async () => {
         setDigestBusy(true);
         try {
-          const res = await fetch(
+          const res = await apiFetch(
             `${apiBase}/sections/${workspace.section.id}/digest`,
             { method: "POST" }
           );
-          const data = await res.json();
+          const data = res.data;
           if (!res.ok) {
             showToast("err", data.error || "Failed to send summary email.");
-          } else if (!data.sent && data.submissionCount === 0) {
+          } else if (data.skipped) {
+            showToast("err", data.error || "A summary for this section is already being sent.");
+          } else if (data.submissionCount === 0) {
             showToast("err", "No new waiting student requests to summarize yet.");
-          } else {
+          } else if (data.deliveryStatus === "FAILED") {
+            showToast(
+              "err",
+              `The summary email was NOT sent: ${data.error || "delivery failed"} The ${data.submissionCount} requests stay in the queue.`
+            );
+            await loadWorkspace(workspace.section.id);
+          } else if (data.deliveryStatus === "PREVIEW_ONLY") {
             showToast(
               "ok",
-              `Combined ${data.submissionCount} requests into 1 summary (${formatDeliveryLabel(
-                data.deliveryStatus
-              )}).`
+              `Saved a preview of the summary (${data.submissionCount} requests). Preview mode doesn't send email, so these requests stay in the queue.`
             );
+            await loadWorkspace(workspace.section.id);
+          } else {
+            showToast("ok", `Emailed 1 summary covering ${data.submissionCount} requests.`);
             await loadWorkspace(workspace.section.id);
           }
         } finally {
@@ -1115,7 +1125,7 @@ export function TeacherWorkspace({
     if (!selectedSectionId) return;
     setStuBusy(true);
     try {
-      const res = await fetch(`${apiBase}/students`, {
+      const res = await apiFetch(`${apiBase}/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1129,7 +1139,7 @@ export function TeacherWorkspace({
           defaultPassword: stuPass || undefined,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Could not add student.");
         return;
@@ -1162,16 +1172,16 @@ export function TeacherWorkspace({
       form.append("defaultPassword", importDefaultPass);
       form.append("file", importFile);
 
-      const res = await fetch(`${apiBase}/students/import`, {
+      const res = await apiFetch(`${apiBase}/students/import`, {
         method: "POST",
         body: form,
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Bulk upload failed.");
         return;
       }
-      setImportReport(data);
+      setImportReport(data as NonNullable<typeof importReport>);
       setImportFile(null);
       showToast(
         "ok",
@@ -1207,7 +1217,7 @@ export function TeacherWorkspace({
     moduleUrl: string
   ) {
     if (!selectedSectionId) return false;
-    const res = await fetch(`${apiBase}/students/assign-track`, {
+    const res = await apiFetch(`${apiBase}/students/assign-track`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1220,7 +1230,7 @@ export function TeacherWorkspace({
           finalsTrack === "OPENLEARNING_MODULE" ? moduleUrl : null,
       }),
     });
-    const data = await res.json();
+    const data = res.data;
     if (!res.ok) {
       showToast("err", data.error || "Failed to update track assignment.");
       return false;
@@ -1243,7 +1253,7 @@ export function TeacherWorkspace({
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/students/${editStudentTarget.id}`, {
+        const res = await apiFetch(`${apiBase}/students/${editStudentTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1255,7 +1265,7 @@ export function TeacherWorkspace({
             email: editStuEmail,
           }),
         });
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Could not update student details.");
           return;
@@ -1288,7 +1298,7 @@ export function TeacherWorkspace({
       confirmLabel: "Yes, Reset Password",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(
+        const res = await apiFetch(
           `${apiBase}/students/${target.id}/reset-password`,
           {
             method: "POST",
@@ -1296,7 +1306,7 @@ export function TeacherWorkspace({
             body: JSON.stringify({ newPassword: resetNewPass }),
           }
         );
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Password reset failed.");
           return;
@@ -1319,7 +1329,7 @@ export function TeacherWorkspace({
       confirmLabel: "Yes, Remove Student",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(
+        const res = await apiFetch(
           `${apiBase}/sections/${selectedSectionId}/enrollments/${st.id}`,
           { method: "DELETE" }
         );
@@ -2222,6 +2232,36 @@ export function TeacherWorkspace({
       {/* TAB 6: EMAIL SUMMARY */}
       {workspace && activeTab === "digest" && (
         <div className="space-y-5">
+          {(() => {
+            const latest = workspace.digestLogs[0];
+            if (!latest || latest.deliveryStatus === "SENT") return null;
+            const failed = latest.deliveryStatus === "FAILED";
+            return (
+              <div
+                role="alert"
+                className={`flex items-start gap-2.5 border-l-4 px-4 py-3 text-xs ${
+                  failed
+                    ? "border-[#A92B2C] bg-[#FEE2E2] text-[#7F1D1D]"
+                    : "border-[#D97706] bg-[#FEF3C7] text-[#78350F]"
+                }`}
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <div className="font-bold">
+                    {failed
+                      ? "The last summary email was not sent."
+                      : "Summaries are only being saved as previews, not emailed."}
+                  </div>
+                  <p className="mt-0.5">
+                    {failed
+                      ? latest.errorMessage || "Email delivery failed."
+                      : "The email mode is set to Preview. Ask the RizLife administrator to configure Resend or SMTP."}{" "}
+                    Waiting requests stay in the queue until a summary is actually emailed.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="folio-panel p-5 space-y-4">
               <div className="flex items-center gap-2">
@@ -2371,9 +2411,22 @@ export function TeacherWorkspace({
                           {log.submissionCount}
                         </td>
                         <td className="px-3 py-2">
-                          <span className="border border-[#C6B393] bg-[#EFE6D2] px-2 py-0.5 text-[10px] font-bold">
+                          <span
+                            className={`border px-2 py-0.5 text-[10px] font-bold ${
+                              log.deliveryStatus === "SENT"
+                                ? "border-[#C6B393] bg-[#EFE6D2]"
+                                : log.deliveryStatus === "FAILED"
+                                ? "border-[#A92B2C] bg-[#FEE2E2] text-[#7F1D1D]"
+                                : "border-[#D97706] bg-[#FEF3C7] text-[#78350F]"
+                            }`}
+                          >
                             {formatDeliveryLabel(log.deliveryStatus)}
                           </span>
+                          {log.deliveryStatus === "FAILED" && log.errorMessage && (
+                            <div className="mt-1 max-w-[16rem] text-[10px] text-[#7F1D1D]">
+                              {log.errorMessage}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2">{log.subject}</td>
                         <td className="px-3 py-2 text-right">

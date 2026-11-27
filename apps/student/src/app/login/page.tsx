@@ -1,4 +1,4 @@
-import { isMicrosoftSsoConfigured } from "@rizlife/shared/microsoft-sso";
+import { isMicrosoftSsoEnabled } from "@rizlife/shared/portal-auth";
 import { LoginCard } from "@rizlife/shared/ui";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,8 @@ export default async function StudentLoginPage({
   const errorMap: Record<string, string> = {
     unauthorized:
       "Access restricted to Student accounts (@student.apc.edu.ph). Teachers and Admins should use their dedicated portal.",
+    sso_disabled:
+      "Microsoft sign-in is currently turned off by the RizLife administrator. Please use your email and password below.",
     sso_not_configured:
       "Microsoft SSO awaits APC IT tenant credentials. Please use your email and password below.",
     sso_account_not_provisioned:
@@ -34,7 +36,7 @@ export default async function StudentLoginPage({
       portalSubtitle="Sign in to view your Rizal tasks, submit OpenLearning links, and track your stamps."
       defaultDemoEmail="jdelacruz@student.apc.edu.ph"
       defaultDemoPassword="Student@2026"
-      microsoftSsoConfigured={isMicrosoftSsoConfigured()}
+      microsoftSsoConfigured={await isMicrosoftSsoEnabled()}
       initialError={
         params.error
           ? errorMap[params.error] ?? "Sign-in could not be completed. Please try again."

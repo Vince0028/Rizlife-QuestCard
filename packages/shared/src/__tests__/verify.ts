@@ -7,6 +7,7 @@ import { runMicrosoftSsoChecks } from "./sso-callback";
 import { runDeadlineStateChecks } from "./deadline-states";
 import { runAdapterLazyColumnChecks } from "./adapter-lazy-columns";
 import { runRouteAuthChecks } from "./route-auth";
+import { runHardeningChecks } from "./hardening";
 import { signSessionToken, verifySessionToken } from "../auth";
 import { hashPassword, verifyPassword } from "../password";
 import { createSectionSchema, validateSubmissionUrl } from "../validation";
@@ -258,7 +259,10 @@ async function run() {
   // 11. HTTP layer: workspace route authorization (401/403/2xx) + portal middleware
   await runRouteAuthChecks();
 
-  // 12. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
+  // 12. Edge-case guards: admin routes, settings/cron, finals track, quest validation, errors
+  await runHardeningChecks();
+
+  // 13. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
   //     Keep last: it points the adapter at a fake PostgREST for its duration.
   await runAdapterLazyColumnChecks();
 

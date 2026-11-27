@@ -5,7 +5,12 @@
  */
 import assert from "node:assert/strict";
 import { prisma } from "../db";
-import { reviewOrStampSubmission, submitStudentQuest } from "../workspace-service";
+import {
+  getSectionWorkspaceData,
+  reviewOrStampSubmission,
+  submitStudentQuest,
+} from "../workspace-service";
+import { maybeTriggerThresholdDigest, sendSectionDigest } from "../digest";
 import type { SessionPayload } from "../types";
 
 const TEACHER_ID = "usr_teacher_01"; // from the adapter's seed (mirrors supabase/setup.sql)
@@ -168,7 +173,8 @@ export async function runSubmissionLifecycleChecks() {
     assert.equal(after!.submittedAt!.getTime(), stamped!.submittedAt!.getTime());
   }
 
-  // (3) Reaching digestThreshold (20) fires exactly one THRESHOLD digest batch
+  // (3) Reaching digestThreshold (20) fires exactly one THRESHOLD digest. In preview
+  //     mode nothing is emailed, so the 20 submissions stay queued for a real send.
   {
     const { section, quest, students } = await createSectionFixture(21, 20);
     const submit = (i: number) =>
@@ -195,12 +201,117 @@ export async function runSubmissionLifecycleChecks() {
     assert.equal(logs[0].teacherId, TEACHER_ID);
     assert.equal(logs[0].recipientEmail, "teacher@apc.edu.ph");
     assert.equal(logs[0].deliveryStatus, "PREVIEW_ONLY");
-    assert.equal(await undigested(), 0, "all 20 submissions are marked as included in the digest");
+    assert.equal(await undigested(), 20, "a preview is not an email: submissions stay queued");
     const refreshed = await prisma.section.findUnique({ where: { id: section.id } });
-    assert.ok(refreshed!.lastDigestSentAt instanceof Date);
+    assert.ok(refreshed!.lastDigestSentAt instanceof Date, "the attempt claims the section");
 
-    await submit(20); // 21st: starts a new batch of 1, below threshold
-    assert.equal((await digestLogs()).length, 1, "a new batch below threshold must not send");
-    assert.equal(await undigested(), 1);
+    await submit(20); // 21st: over threshold again, but inside the threshold cooldown
+    assert.equal((await digestLogs()).length, 1, "threshold digests respect the cooldown");
+    assert.equal(await undigested(), 21);
+  }
+
+  await runDigestDeliveryChecks();
+}
+
+/** Points the global email provider at `provider` for the duration of `fn`. */
+async function withEmailProvider<T>(provider: string, fn: () => Promise<T>): Promise<T> {
+  const before = await prisma.systemSetting.findUnique({ where: { id: "global" } });
+  await prisma.systemSetting.upsert({
+    where: { id: "global" },
+    update: { emailProvider: provider },
+    create: { id: "global", emailProvider: provider },
+  });
+  try {
+    return await fn();
+  } finally {
+    await prisma.systemSetting.update({
+      where: { id: "global" },
+      data: { emailProvider: before?.emailProvider ?? "preview" },
+    });
+  }
+}
+
+async function submitAll(questId: string, students: { id: string }[]) {
+  for (const [i, st] of students.entries()) {
+    await submitStudentQuest({
+      studentUserId: st.id,
+      rawBody: { questId, submissionUrl: url(`delivery-${i}`) },
+      scheduleDigestCheck: () => {}, // threshold check not under test here
+    });
+  }
+}
+
+async function runDigestDeliveryChecks() {
+  const savedKey = process.env.RESEND_API_KEY;
+  const savedFetch = globalThis.fetch;
+  const queued = (sectionId: string) =>
+    prisma.submission.count({
+      where: { quest: { sectionId }, status: "PENDING_REVIEW", includedInDigest: false },
+    });
+
+  try {
+    // (4) Resend selected but RESEND_API_KEY missing: FAILED, nothing marked as digested.
+    {
+      delete process.env.RESEND_API_KEY;
+      const { section, quest, students } = await createSectionFixture(2, 50);
+      await submitAll(quest.id, students);
+      const result = await withEmailProvider("resend", () =>
+        sendSectionDigest(section.id, "MANUAL")
+      );
+      assert.equal(result.sent, false);
+      assert.equal(result.deliveryStatus, "FAILED");
+      assert.match(result.error ?? "", /RESEND_API_KEY/);
+      assert.equal(await queued(section.id), 2, "unsent digests leave submissions queued");
+      const [log] = await prisma.emailDigestLog.findMany({ where: { sectionId: section.id } });
+      assert.equal(log.deliveryStatus, "FAILED");
+      assert.match(log.errorMessage ?? "", /RESEND_API_KEY/);
+    }
+
+    // (5) A delivered email (Resend mocked) marks the batch and is the "last sent" time.
+    {
+      process.env.RESEND_API_KEY = "re_test_key";
+      const sentTo: string[] = [];
+      globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+        if (String(input) === "https://api.resend.com/emails") {
+          sentTo.push(...(JSON.parse(String(init?.body)) as { to: string[] }).to);
+          return Response.json({ id: "email_1" });
+        }
+        return savedFetch(input as RequestInfo, init);
+      }) as typeof fetch;
+      const { section, quest, students } = await createSectionFixture(3, 50);
+      await submitAll(quest.id, students);
+      const result = await withEmailProvider("resend", () =>
+        sendSectionDigest(section.id, "MANUAL")
+      );
+      assert.equal(result.sent, true);
+      assert.equal(result.deliveryStatus, "SENT");
+      assert.deepEqual(sentTo, ["teacher@apc.edu.ph"]);
+      assert.equal(await queued(section.id), 0, "a sent digest marks its submissions");
+      const ws = await getSectionWorkspaceData(section.id, teacherSession);
+      assert.ok(ws.section.lastDigestSentAt, "workspace reports the last *sent* digest");
+      globalThis.fetch = savedFetch;
+    }
+
+    // (6) Concurrent triggers for one section produce exactly one digest.
+    {
+      const { section, quest, students } = await createSectionFixture(3, 3);
+      await submitAll(quest.id, students);
+      const results = await Promise.all([
+        maybeTriggerThresholdDigest(section.id),
+        maybeTriggerThresholdDigest(section.id),
+        sendSectionDigest(section.id, "MANUAL"),
+        sendSectionDigest(section.id, "SCHEDULED"),
+        maybeTriggerThresholdDigest(section.id),
+      ]);
+      assert.equal(results.length, 5);
+      const logs = await prisma.emailDigestLog.findMany({ where: { sectionId: section.id } });
+      assert.equal(logs.length, 1, `expected one digest under concurrency, got ${logs.length}`);
+      const again = await sendSectionDigest(section.id, "MANUAL");
+      assert.equal(again.skipped, true, "a second manual send right after is held back");
+    }
+  } finally {
+    globalThis.fetch = savedFetch;
+    if (savedKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = savedKey;
   }
 }
