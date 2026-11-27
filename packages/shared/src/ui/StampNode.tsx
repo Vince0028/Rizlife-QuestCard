@@ -42,7 +42,7 @@ export function StampNode({
     >
       {isOverdue && !isStamped && !isPending && (
         <span className="absolute right-1.5 top-1.5 rounded-sm bg-[#FEE2E2] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B91C1C]">
-          Due
+          Overdue
         </span>
       )}
 

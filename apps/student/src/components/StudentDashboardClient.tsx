@@ -29,6 +29,12 @@ import {
 } from "@rizlife/shared/ui";
 import { validateSubmissionUrl } from "@rizlife/shared/validation";
 import {
+  formatQuestDeadline,
+  getQuestDeadlineState,
+  type DeadlineStateKind,
+  type QuestDeadlineState,
+} from "@rizlife/shared/deadline";
+import {
   FINALS_TRACK_LABELS,
   QUEST_CATEGORY_LABELS,
   type FinalsTrackValue,
@@ -87,6 +93,17 @@ interface QuestCardApiResponse {
   };
 }
 
+type ListFilter = "ALL" | SubmissionStatusValue | "OVERDUE" | "DUE_SOON";
+
+const MAX_BANNER_CHIPS = 5;
+
+/** Text colour for a deadline line, by deadline state. */
+function deadlineToneClass(kind: DeadlineStateKind): string {
+  if (kind === "OVERDUE") return "font-semibold text-[#A92B2C]";
+  if (kind === "DUE_TODAY" || kind === "DUE_SOON") return "font-semibold text-[#92400E]";
+  return "";
+}
+
 function formatShortDate(iso: string | null): string {
   if (!iso) return "Open";
   const d = new Date(iso);
@@ -107,7 +124,13 @@ export function StudentDashboardClient({
   const [sectionId, setSectionId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"card" | "list" | "leaderboard">("card");
-  const [listFilter, setListFilter] = useState<"ALL" | SubmissionStatusValue>("ALL");
+  const [listFilter, setListFilter] = useState<ListFilter>("ALL");
+  // Ticks every minute so tasks flip from "Due today" to "Overdue" without a reload.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const [selectedQuest, setSelectedQuest] = useState<StudentQuest | null>(null);
   const [urlInput, setUrlInput] = useState("");
@@ -156,6 +179,16 @@ export function StudentDashboardClient({
     return map;
   }, [data]);
 
+  const deadlineByQuestId = useMemo(() => {
+    const map = new Map<string, QuestDeadlineState>();
+    if (!data) return map;
+    for (const q of data.quests) {
+      const status = submissionByQuestId.get(q.id)?.status ?? "NOT_STARTED";
+      map.set(q.id, getQuestDeadlineState(q.deadline, status, now));
+    }
+    return map;
+  }, [data, submissionByQuestId, now]);
+
   const counts = useMemo(() => {
     const c = {
       stamped: 0,
@@ -163,9 +196,10 @@ export function StudentDashboardClient({
       revision: 0,
       notStarted: 0,
       overdue: 0,
+      dueToday: 0,
+      dueSoon: 0,
     };
     if (!data) return c;
-    const now = Date.now();
     for (const q of data.quests) {
       const status = submissionByQuestId.get(q.id)?.status ?? "NOT_STARTED";
       if (status === "STAMPED") c.stamped += 1;
@@ -173,17 +207,33 @@ export function StudentDashboardClient({
       else if (status === "NEEDS_REVISION") c.revision += 1;
       else c.notStarted += 1;
 
-      if (
-        q.deadline &&
-        new Date(q.deadline).getTime() < now &&
-        status !== "STAMPED" &&
-        status !== "PENDING_REVIEW"
-      ) {
-        c.overdue += 1;
-      }
+      const kind = deadlineByQuestId.get(q.id)?.kind;
+      if (kind === "OVERDUE") c.overdue += 1;
+      else if (kind === "DUE_TODAY") c.dueToday += 1;
+      else if (kind === "DUE_SOON") c.dueSoon += 1;
     }
     return c;
-  }, [data, submissionByQuestId]);
+  }, [data, submissionByQuestId, deadlineByQuestId]);
+
+  /** Tasks for the banner, ordered Overdue → Due today → Due soon, then by task number. */
+  const deadlineAlerts = useMemo(() => {
+    if (!data) return [];
+    const order: Partial<Record<DeadlineStateKind, number>> = {
+      OVERDUE: 0,
+      DUE_TODAY: 1,
+      DUE_SOON: 2,
+    };
+    return data.quests
+      .flatMap((q) => {
+        const state = deadlineByQuestId.get(q.id);
+        return state && order[state.kind] !== undefined ? [{ quest: q, state }] : [];
+      })
+      .sort(
+        (a, b) =>
+          order[a.state.kind]! - order[b.state.kind]! ||
+          a.quest.taskNumber - b.quest.taskNumber
+      );
+  }, [data, deadlineByQuestId]);
 
   const urlInspection = useMemo(() => {
     if (!urlInput.trim()) return null;
@@ -378,17 +428,76 @@ export function StudentDashboardClient({
         </div>
       ) : (
         <div className="space-y-4">
-          {(counts.revision > 0 || counts.overdue > 0) && (
-            <div className="flex flex-wrap items-center gap-2.5 border-l-4 border-[#A92B2C] bg-[#FEE2E2] px-4 py-2.5 text-xs font-medium text-[#7F1D1D]">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>
-                {counts.revision > 0 &&
-                  `${counts.revision} task(s) need revision. `}
-                {counts.overdue > 0 &&
-                  `${counts.overdue} quest(s) are past deadline.`}
-              </span>
-            </div>
-          )}
+          {(counts.revision > 0 || deadlineAlerts.length > 0) && (() => {
+            const urgent = counts.overdue > 0 || counts.revision > 0;
+            const summary = [
+              counts.overdue > 0 && `${counts.overdue} overdue`,
+              counts.dueToday > 0 && `${counts.dueToday} due today`,
+              counts.dueSoon > 0 && `${counts.dueSoon} due soon`,
+            ].filter(Boolean);
+            const shown = deadlineAlerts.slice(0, MAX_BANNER_CHIPS);
+            const hidden = deadlineAlerts.length - shown.length;
+            return (
+              <div
+                className={`space-y-2 border-l-4 px-4 py-2.5 text-xs font-medium ${
+                  urgent
+                    ? "border-[#A92B2C] bg-[#FEE2E2] text-[#7F1D1D]"
+                    : "border-[#D97706] bg-[#FEF3C7] text-[#78350F]"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>
+                    {summary.length > 0 && `Tasks: ${summary.join(" · ")}. `}
+                    {counts.revision > 0 &&
+                      `${counts.revision} task(s) need revision.`}
+                  </span>
+                </div>
+                {shown.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pl-6">
+                    {shown.map(({ quest, state }) => (
+                      <button
+                        key={quest.id}
+                        type="button"
+                        onClick={() => openQuestDrawer(quest)}
+                        title={state.detail}
+                        className={`inline-flex max-w-full items-center gap-1 border bg-white px-2 py-1 text-left text-[11px] transition hover:shadow-sm ${
+                          state.kind === "OVERDUE"
+                            ? "border-[#A92B2C] text-[#7F1D1D] hover:bg-[#FFF5F5]"
+                            : "border-[#D97706] text-[#78350F] hover:bg-[#FFFBEB]"
+                        }`}
+                      >
+                        <span className="shrink-0 font-mono font-bold">
+                          #{quest.taskNumber}
+                        </span>
+                        <span className="max-w-[14rem] truncate font-semibold">
+                          {quest.title}
+                        </span>
+                        <span className="shrink-0">· {state.shortDetail}</span>
+                      </button>
+                    ))}
+                    {hidden > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab("list");
+                          // Land on the group the first hidden task belongs to.
+                          setListFilter(
+                            deadlineAlerts[shown.length].state.kind === "OVERDUE"
+                              ? "OVERDUE"
+                              : "DUE_SOON"
+                          );
+                        }}
+                        className="px-2 py-1 text-[11px] font-bold underline underline-offset-2"
+                      >
+                        +{hidden} more
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* FINALS CAPSTONE TRACK BANNER */}
           {data.finalsTrack && (
@@ -503,11 +612,21 @@ export function StudentDashboardClient({
                   {(
                     [
                       ["ALL", "All Tasks"],
+                      [
+                        "OVERDUE",
+                        counts.overdue > 0 ? `Overdue (${counts.overdue})` : "Overdue",
+                      ],
+                      [
+                        "DUE_SOON",
+                        counts.dueToday + counts.dueSoon > 0
+                          ? `Due Soon (${counts.dueToday + counts.dueSoon})`
+                          : "Due Soon",
+                      ],
                       ["NOT_STARTED", "Not Started"],
                       ["PENDING_REVIEW", "Pending Review"],
                       ["NEEDS_REVISION", "Needs Revision"],
                       ["STAMPED", "Stamped"],
-                    ] as const
+                    ] as const satisfies ReadonlyArray<readonly [ListFilter, string]>
                   ).map(([key, label]) => (
                     <button
                       key={key}
@@ -537,21 +656,45 @@ export function StudentDashboardClient({
                 <div className="folio-tonal p-6 text-center text-xs text-[#5E5246]">
                   No tasks have been posted by your instructor yet.
                 </div>
-              ) : (
+              ) : (() => {
+                const visibleQuests = data.quests.filter((q) => {
+                  const status = submissionByQuestId.get(q.id)?.status ?? "NOT_STARTED";
+                  const kind = deadlineByQuestId.get(q.id)?.kind;
+                  if (listFilter === "ALL") return true;
+                  if (listFilter === "OVERDUE") return kind === "OVERDUE";
+                  if (listFilter === "DUE_SOON")
+                    return kind === "DUE_TODAY" || kind === "DUE_SOON";
+                  return status === listFilter;
+                });
+                if (visibleQuests.length === 0) {
+                  return (
+                    <div className="folio-tonal p-6 text-center text-xs text-[#5E5246]">
+                      {listFilter === "OVERDUE"
+                        ? "Nothing overdue. Nice work!"
+                        : listFilter === "DUE_SOON"
+                        ? "Nothing due in the next 3 days."
+                        : "No tasks match this filter."}
+                    </div>
+                  );
+                }
+                return (
                 <div className="space-y-2.5">
-                  {data.quests
-                    .filter((q) => {
-                      const status =
-                        submissionByQuestId.get(q.id)?.status ?? "NOT_STARTED";
-                      return listFilter === "ALL" || status === listFilter;
-                    })
+                  {visibleQuests
                     .map((q) => {
                       const sub = submissionByQuestId.get(q.id);
                       const status = sub?.status ?? "NOT_STARTED";
+                      const deadlineState = deadlineByQuestId.get(q.id);
+                      const kind = deadlineState?.kind ?? "NO_DEADLINE";
                       return (
                         <div
                           key={q.id}
-                          className="flex flex-col gap-3 border border-[#C6B393] bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                          className={`flex flex-col gap-3 border border-[#C6B393] bg-white p-4 sm:flex-row sm:items-center sm:justify-between ${
+                            kind === "OVERDUE"
+                              ? "border-l-4 border-l-[#A92B2C]"
+                              : kind === "DUE_TODAY"
+                              ? "border-l-4 border-l-[#D97706]"
+                              : ""
+                          }`}
                         >
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
@@ -564,14 +707,16 @@ export function StudentDashboardClient({
                             </div>
                             <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#5E5246]">
                               <span>{QUEST_CATEGORY_LABELS[q.category]}</span>
-                              <span className="inline-flex items-center gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 ${deadlineToneClass(kind)}`}
+                              >
                                 <Calendar className="h-3 w-3" />
-                                Deadline: {formatShortDate(q.deadline)}
+                                {deadlineState?.detail ?? "No deadline"}
                               </span>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2.5">
-                            <StatusBadge status={status} />
+                            <StatusBadge status={status} deadlineKind={kind} />
                             <button
                               type="button"
                               onClick={() => openQuestDrawer(q)}
@@ -584,7 +729,8 @@ export function StudentDashboardClient({
                       );
                     })}
                 </div>
-              )}
+                );
+              })()}
             </section>
           )}
 
@@ -692,15 +838,36 @@ export function StudentDashboardClient({
             {(() => {
               const sub = submissionByQuestId.get(selectedQuest.id);
               const status = sub?.status ?? "NOT_STARTED";
+              const deadlineState = deadlineByQuestId.get(selectedQuest.id);
+              const kind = deadlineState?.kind ?? "NO_DEADLINE";
+              const urgencyText =
+                kind === "OVERDUE"
+                  ? `Overdue · ${deadlineState?.relative}`
+                  : kind === "DUE_TODAY" || kind === "DUE_SOON"
+                  ? deadlineState?.label
+                  : null;
               return (
                 <>
-                  <div className="folio-tonal flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
-                    <StatusBadge status={status} />
-                    <div className="text-[11px] text-[#5E5246]">
-                      Deadline:{" "}
-                      <strong className="text-[#16192C]">
-                        {formatShortDate(selectedQuest.deadline)}
-                      </strong>
+                  <div
+                    className={`folio-tonal flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 ${
+                      kind === "OVERDUE"
+                        ? "border-l-4 border-l-[#A92B2C]"
+                        : kind === "DUE_TODAY"
+                        ? "border-l-4 border-l-[#D97706]"
+                        : ""
+                    }`}
+                  >
+                    <StatusBadge status={status} deadlineKind={kind} />
+                    <div className="text-right text-[11px] text-[#5E5246]">
+                      <div>
+                        Deadline:{" "}
+                        <strong className="text-[#16192C]">
+                          {formatQuestDeadline(selectedQuest.deadline)}
+                        </strong>
+                      </div>
+                      {urgencyText && (
+                        <div className={deadlineToneClass(kind)}>{urgencyText}</div>
+                      )}
                     </div>
                   </div>
 

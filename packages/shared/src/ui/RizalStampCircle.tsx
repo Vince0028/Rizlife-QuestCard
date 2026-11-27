@@ -286,7 +286,7 @@ export function RizalStampCircle({
 
         {isOverdue && status === "NOT_STARTED" && (
           <span className="absolute -bottom-1 bg-[#FEE2E2] px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider text-[#B91C1C] border border-[#B91C1C]/30">
-            Due
+            Overdue
           </span>
         )}
       </div>

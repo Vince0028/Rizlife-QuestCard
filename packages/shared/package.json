@@ -10,6 +10,7 @@
     "./workspace-service": "./src/workspace-service.ts",
     "./microsoft-sso": "./src/microsoft-sso.ts",
     "./leaderboard": "./src/leaderboard.ts",
+    "./deadline": "./src/deadline.ts",
     "./digest": "./src/digest.ts",
     "./excel": "./src/excel.ts",
     "./validation": "./src/validation.ts",

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import { runSubmissionLifecycleChecks } from "./submission-lifecycle";
 import { runMicrosoftSsoChecks } from "./sso-callback";
+import { runDeadlineStateChecks } from "./deadline-states";
 import { signSessionToken, verifySessionToken } from "../auth";
 import { hashPassword, verifyPassword } from "../password";
 import { createSectionSchema, validateSubmissionUrl } from "../validation";
@@ -248,6 +249,9 @@ async function run() {
 
   // 9. Microsoft Entra ID SSO callback: state/PKCE, tenant, APC domain, linking, portal roles
   await runMicrosoftSsoChecks();
+
+  // 10. Quest deadline states (Overdue / Due today / Due soon) in Asia/Manila days
+  runDeadlineStateChecks();
 
   console.log("ALL CORE VERIFICATION CHECKS PASSED!");
 }
