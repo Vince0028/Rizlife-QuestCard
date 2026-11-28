@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS "User" (
     "mustChangePassword" BOOLEAN NOT NULL DEFAULT false,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "microsoftOid" TEXT,
+    "sessionVersion" INTEGER NOT NULL DEFAULT 0,
+    "tempPasswordExpiresAt" TIMESTAMP(3),
+    "failedLoginCount" INTEGER NOT NULL DEFAULT 0,
+    "lockedUntil" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
@@ -137,6 +141,12 @@ CREATE TABLE IF NOT EXISTS "SystemSetting" (
     CONSTRAINT "SystemSetting_pkey" PRIMARY KEY ("id")
 );
 
+-- Columns added after a table was first created (re-runs on older databases)
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "sessionVersion" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tempPasswordExpiresAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "failedLoginCount" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lockedUntil" TIMESTAMP(3);
+
 -- 3. Indexes
 CREATE UNIQUE INDEX IF NOT EXISTS "User_studentId_key" ON "User"("studentId");
 CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
@@ -224,11 +234,12 @@ INSERT INTO "SystemSetting" (
 )
 ON CONFLICT ("id") DO NOTHING;
 
--- 6. First Admin, First Teacher, and Student (vpalobin@student.apc.edu.ph)
--- Passwords:
---   Admin   (admin@apc.edu.ph)              -> Admin@RizLife2026
---   Teacher (teacher@apc.edu.ph)            -> Teacher@RizLife2026
---   Student (vpalobin@student.apc.edu.ph)   -> Student@2026
+-- 6. Starter accounts: admin, a teacher, and a fictional demo student.
+--    They are created WITHOUT a usable password (no password is ever stored in this
+--    repository). Issue random, expiring temporary passwords with the script, run from
+--    the repo with this project's credentials in .env:
+--      npm run accounts:temp-passwords -- --emails admin@apc.edu.ph --apply
+--    (see README -> "First admin"). Re-running this script never touches passwords.
 INSERT INTO "User" (
   "id", "studentId", "firstName", "middleName", "lastName",
   "email", "passwordHash", "role", "courseCode",
@@ -237,14 +248,14 @@ INSERT INTO "User" (
 (
   'usr_admin_01',
   NULL,
-  'Clarisse',
+  'RizLife',
   NULL,
-  'Valdez',
+  'Admin',
   'admin@apc.edu.ph',
-  '$2b$10$Cy7lPoCH/5hxqLN241wX7.0nAiIFq5aU0FqyIDxgMjmARFaNEOkQe',
+  NULL,
   'ADMIN',
   NULL,
-  false,
+  true,
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
@@ -252,29 +263,29 @@ INSERT INTO "User" (
 (
   'usr_teacher_01',
   NULL,
-  'April Anne',
-  'G.',
-  'Tuburan',
+  'Maria Clara',
+  NULL,
+  'de los Santos',
   'teacher@apc.edu.ph',
-  '$2b$10$k2ee53CavLcz6KlRu2kug.9Tvcq7lXcHjJNr0L05IZGBvNabEj9Lu',
+  NULL,
   'TEACHER',
   NULL,
-  false,
+  true,
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
 ),
 (
-  'usr_student_vince',
-  '2024-140101',
-  'Vince Nelmar',
-  'Pega',
-  'Alobin',
-  'vpalobin@student.apc.edu.ph',
-  '$2b$10$N2qYNY8Prf2CFM4ZVkIK8OjpaDFbA.E6xLCCWystzp0L32dFcWp6i',
+  'usr_student_demo',
+  '2099-000001',
+  'Juan Miguel',
+  'Reyes',
+  'Dela Cruz',
+  'jdelacruz@student.apc.edu.ph',
+  NULL,
   'STUDENT',
   'BSIT',
-  false,
+  true,
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
@@ -321,7 +332,7 @@ SET
   "name" = EXCLUDED."name",
   "updatedAt" = CURRENT_TIMESTAMP;
 
--- 8. Enroll Vince Alobin (vpalobin@student.apc.edu.ph) into Section BSIT241
+-- 8. Enroll the demo student (jdelacruz@student.apc.edu.ph) into Section BSIT241
 INSERT INTO "Enrollment" (
   "id",
   "studentId",
@@ -329,20 +340,37 @@ INSERT INTO "Enrollment" (
   "enrolledAt"
 )
 SELECT
-  'enr_vince_bsit',
+  'enr_demo_bsit',
   u."id",
   s."id",
   CURRENT_TIMESTAMP
 FROM "User" u
 JOIN "Section" s ON s."code" = 'BSIT241' AND s."term" = 'Term 2 AY 2026-2027'
-WHERE u."email" = 'vpalobin@student.apc.edu.ph'
+WHERE u."email" = 'jdelacruz@student.apc.edu.ph'
 ON CONFLICT ("studentId", "sectionId") DO NOTHING;
 
--- 9. Grant Supabase API Role Permissions (for SUPABASE_URL + SUPABASE_SECRET_KEY)
-GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+-- 9. API permissions. The app's server key (SUPABASE_SECRET_KEY = service_role) gets
+--    full access; the public API roles get none (anon = anyone holding the publishable
+--    key, authenticated = any Supabase Auth user). RLS is on with no policies as a
+--    second layer; service_role and the table owner (DATABASE_URL) bypass it.
+--    Also: Authentication -> Sign In / Providers -> turn OFF "Allow new users to sign up".
+GRANT USAGE ON SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
+
+ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Section" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Enrollment" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Quest" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Submission" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "EmailDigestLog" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "SystemSetting" ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 
 -- 10. Quick Verification Output (Last Name, First Name, Middle Name)
 SELECT

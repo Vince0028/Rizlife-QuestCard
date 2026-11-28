@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { prisma } from "@rizlife/shared/db";
-import { computeLeaderboard } from "@rizlife/shared/leaderboard";
-import type { SubmissionStatusValue } from "@rizlife/shared/types";
+import {
+  computeLeaderboard,
+  toStudentLeaderboardEntry,
+} from "@rizlife/shared/leaderboard";
+import type {
+  StudentLeaderboardEntry,
+  SubmissionStatusValue,
+} from "@rizlife/shared/types";
 import { getStudentSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +18,8 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
   const enrollments = await prisma.enrollment.findMany({
     where: { studentId: session.userId },
@@ -68,7 +77,7 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  let leaderboardEntries: ReturnType<typeof computeLeaderboard> = [];
+  let leaderboardEntries: StudentLeaderboardEntry[] = [];
   if (activeSection.leaderboardVisible) {
     const [sectionEnrollments, allSubs] = await Promise.all([
       prisma.enrollment.findMany({
@@ -99,6 +108,7 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // Classmates' student numbers, middle names and internal ranking data stay server-side.
     leaderboardEntries = computeLeaderboard(
       sectionEnrollments.map((e) => e.student),
       allSubs.map((s) => ({
@@ -106,7 +116,7 @@ export async function GET(req: NextRequest) {
         status: s.status as SubmissionStatusValue,
       })),
       quests.length
-    );
+    ).map(toStudentLeaderboardEntry);
   }
 
   return NextResponse.json({

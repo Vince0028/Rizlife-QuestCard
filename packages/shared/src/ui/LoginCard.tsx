@@ -142,7 +142,7 @@ export function LoginCard({
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={
                     portal === "student"
-                      ? "vpalobin@student.apc.edu.ph"
+                      ? "jdelacruz@student.apc.edu.ph"
                       : "faculty@apc.edu.ph"
                   }
                   className="folio-input w-full py-2.5 pl-9 pr-3 text-sm"

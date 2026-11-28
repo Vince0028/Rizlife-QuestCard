@@ -71,6 +71,10 @@ export interface SessionPayload {
   courseCode: string | null;
   mustChangePassword: boolean;
   portal: PortalKey;
+  /** User.sessionVersion when the token was issued (missing on pre-2026-11 tokens = 0). */
+  sessionVersion?: number;
+  /** How the user signed in. SSO sessions aren't gated by a pending temporary password. */
+  authMethod?: "password" | "sso";
 }
 
 export interface LeaderboardEntry {
@@ -90,6 +94,19 @@ export interface LeaderboardEntry {
   cumulativeTimeMs: number;
   speedLabel: string;
 }
+
+/** Leaderboard row as exposed to students (GET /api/questcard). */
+export type StudentLeaderboardEntry = Pick<
+  LeaderboardEntry,
+  | "rank"
+  | "studentId"
+  | "fullName"
+  | "courseCode"
+  | "stampedCount"
+  | "totalQuests"
+  | "completionPct"
+  | "speedLabel"
+>;
 
 export interface DigestQuestGroup {
   questId: string;
@@ -121,14 +138,22 @@ export interface DigestQueueSummary {
   htmlPreview: string;
 }
 
+/**
+ * Scheduled digest cron. Must match apps/teacher/vercel.json (checked by `npm run verify`).
+ * Vercel cron runs in UTC: 00:00 and 09:00 UTC = 08:00 and 17:00 Philippine time.
+ */
+export const DIGEST_CRON_SCHEDULE_UTC = "0 0,9 * * *";
+export const DIGEST_SCHEDULE_LABEL = "Daily at 08:00 and 17:00 Philippine time";
+
 export interface StudentImportRow {
+  /** 1-based row/line in the uploaded file (for error messages). */
+  rowNumber: number;
   studentId: string;
   lastName: string;
   firstName: string;
   middleName: string | null;
   courseCode: string | null;
   email: string;
-  password?: string;
 }
 
 export interface StudentImportParseResult {

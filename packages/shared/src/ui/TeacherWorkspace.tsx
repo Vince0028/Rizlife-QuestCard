@@ -14,7 +14,6 @@ import {
   Eye,
   Feather,
   FileSpreadsheet,
-  HelpCircle,
   KeyRound,
   Layers,
   Mail,
@@ -34,9 +33,7 @@ import {
   FINALS_TRACK_LABELS,
   PRESET_OPENLEARNING_MODULES,
   QUEST_CATEGORY_LABELS,
-  type DigestQueueSummary,
   type FinalsTrackValue,
-  type LeaderboardEntry,
   type QuestCategoryValue,
   type SubmissionStatusValue,
 } from "../types";
@@ -50,120 +47,34 @@ import {
 import { RizalQuestCardBoard } from "./RizalQuestCardBoard";
 import { StampCelebrationOverlay } from "./StampCelebrationOverlay";
 import { StatusBadge } from "./StatusBadge";
+import { apiFetch } from "./api-fetch";
+import { TemporaryPasswordDialog, type IssuedCredential } from "./TemporaryPasswordDialog";
+import type {
+  WorkspaceSectionOption,
+  WorkspaceQuestItem,
+  WorkspaceStudentItem,
+  WorkspaceSubmissionItem,
+  WorkspacePayload,
+  WorkspaceTab,
+  WorkspaceSummaryStats,
+} from "./teacher-workspace/types";
+import {
+  formatDateTime,
+  formatDeliveryLabel,
+  formatTriggerLabel,
+  toDatetimeLocal,
+} from "./teacher-workspace/format";
 
-export interface WorkspaceSectionOption {
-  id: string;
-  code: string;
-  name: string;
-  term: string;
-  teacherId: string | null;
-  teacher?: { firstName: string; lastName: string; email: string } | null;
-  _count?: { enrollments: number; quests: number };
-}
-
-export interface WorkspaceQuestItem {
-  id: string;
-  sectionId: string;
-  taskNumber: number;
-  title: string;
-  description: string;
-  category: QuestCategoryValue;
-  openlearningUrl: string | null;
-  startDate: string | null;
-  deadline: string | null;
-}
-
-export interface WorkspaceStudentItem {
-  id: string;
-  studentId: string | null;
-  firstName: string;
-  middleName: string | null;
-  lastName: string;
-  email: string;
-  courseCode: string | null;
-  mustChangePassword: boolean;
-  isActive: boolean;
-  finalsTrack?: FinalsTrackValue;
-  assignedModuleTitle?: string | null;
-  assignedModuleUrl?: string | null;
-}
-
-export interface WorkspaceSubmissionItem {
-  id: string;
-  questId: string;
-  studentId: string;
-  submissionUrl: string | null;
-  studentNote: string | null;
-  status: SubmissionStatusValue;
-  teacherFeedback: string | null;
-  firstSubmittedAt: string | null;
-  submittedAt: string | null;
-  stampedAt: string | null;
-  stampedByName?: string | null;
-  includedInDigest: boolean;
-  quest: { id: string; taskNumber: number; title: string };
-  student: {
-    id: string;
-    studentId: string | null;
-    firstName: string;
-    middleName?: string | null;
-    lastName: string;
-    courseCode: string | null;
-    email: string;
-  };
-}
-
-export interface WorkspaceDigestLog {
-  id: string;
-  recipientEmail: string;
-  subject: string;
-  submissionCount: number;
-  triggerType: string;
-  deliveryStatus: string;
-  htmlPreview: string;
-  errorMessage: string | null;
-  sentAt: string;
-}
-
-export interface WorkspacePayload {
-  section: {
-    id: string;
-    code: string;
-    name: string;
-    term: string;
-    teacherId: string | null;
-    teacherName: string;
-    teacherEmail: string;
-    leaderboardVisible: boolean;
-    digestThreshold: number;
-    digestEnabled: boolean;
-    lastDigestSentAt: string | null;
-  };
-  quests: WorkspaceQuestItem[];
-  students: WorkspaceStudentItem[];
-  submissions: WorkspaceSubmissionItem[];
-  leaderboard: LeaderboardEntry[];
-  digestQueue: DigestQueueSummary | null;
-  digestLogs: WorkspaceDigestLog[];
-}
-
-export type WorkspaceTab =
-  | "queue"
-  | "stampcard"
-  | "tracker"
-  | "quests"
-  | "leaderboard"
-  | "digest"
-  | "roster";
-
-export interface WorkspaceSummaryStats {
-  sectionCode: string;
-  studentsCount: number;
-  questsCount: number;
-  pendingCount: number;
-  digestPendingCount: number;
-  digestThreshold: number;
-}
+export type {
+  WorkspaceSectionOption,
+  WorkspaceQuestItem,
+  WorkspaceStudentItem,
+  WorkspaceSubmissionItem,
+  WorkspaceDigestLog,
+  WorkspacePayload,
+  WorkspaceTab,
+  WorkspaceSummaryStats,
+} from "./teacher-workspace/types";
 
 interface TeacherWorkspaceProps {
   apiBase?: string;
@@ -181,41 +92,6 @@ interface TeacherWorkspaceProps {
     email: string;
   }[];
   onSectionsChanged?: () => void;
-}
-
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDeliveryLabel(status: string): string {
-  if (status === "SENT") return "Sent to Outlook";
-  if (status === "PREVIEW_ONLY") return "Saved Email Preview";
-  return "Delivery Failed";
-}
-
-function formatTriggerLabel(trigger: string): string {
-  if (trigger === "THRESHOLD") return "Auto-sent at batch threshold";
-  if (trigger === "SCHEDULED") return "Daily scheduled digest";
-  return "Sent manually by teacher";
 }
 
 export function TeacherWorkspace({
@@ -265,7 +141,6 @@ export function TeacherWorkspace({
   const [banner, setBanner] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
-  const [showGuide, setShowGuide] = useState(true);
 
   const [stampOverlay, setStampOverlay] = useState<{
     visible: boolean;
@@ -293,7 +168,7 @@ export function TeacherWorkspace({
   );
   const [stampCardFeedback, setStampCardFeedback] = useState("");
   const [stampCardUrl, setStampCardUrl] = useState("");
-  const [stampCardBusy, setStampCardBusy] = useState(false);
+  const [, setStampCardBusy] = useState(false);
 
   const [trackerSearch, setTrackerSearch] = useState("");
   const [trackerCourseFilter, setTrackerCourseFilter] = useState("ALL");
@@ -336,13 +211,12 @@ export function TeacherWorkspace({
   const [stuMiddle, setStuMiddle] = useState("");
   const [stuCourse, setStuCourse] = useState("BSIT");
   const [stuEmail, setStuEmail] = useState("");
-  const [stuPass, setStuPass] = useState("Student@2026");
+  const [issuedCredentials, setIssuedCredentials] = useState<IssuedCredential[] | null>(null);
   const [stuBusy, setStuBusy] = useState(false);
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showUploadStudentsModal, setShowUploadStudentsModal] = useState(false);
 
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importDefaultPass, setImportDefaultPass] = useState("Student@2026");
   const [importReport, setImportReport] = useState<{
     totalParsed: number;
     createdCount: number;
@@ -352,8 +226,6 @@ export function TeacherWorkspace({
   } | null>(null);
   const [importBusy, setImportBusy] = useState(false);
 
-  const [resetTarget, setResetTarget] = useState<WorkspaceStudentItem | null>(null);
-  const [resetNewPass, setResetNewPass] = useState("Student@2026");
 
   const [showEditSection, setShowEditSection] = useState(false);
   const [editSecCode, setEditSecCode] = useState("");
@@ -435,6 +307,24 @@ export function TeacherWorkspace({
     }, 5500);
   }, []);
 
+  /** Digest-log HTML isn't part of the workspace payload; load it when opened. */
+  async function openDigestLogPreview(logId: string) {
+    if (!workspace) return;
+    try {
+      const res = await apiFetch(
+        `${apiBase}/sections/${workspace.section.id}/digest-logs/${logId}`
+      );
+      const data = res.data;
+      if (!res.ok) {
+        showToast("err", data.error || "Could not load that email.");
+        return;
+      }
+      setPreviewHtml({ subject: data.subject, html: data.html });
+    } catch {
+      showToast("err", "Network error while loading the email.");
+    }
+  }
+
   const triggerStampAnimation = useCallback(
     (studentId: string, questId: string, taskNumber: number, studentName: string) => {
       setRecentlyUnstampedKey(null);
@@ -466,9 +356,9 @@ export function TeacherWorkspace({
   );
 
   const loadSectionsList = useCallback(async () => {
-    const res = await fetch(`${apiBase}/sections`);
+    const res = await apiFetch(`${apiBase}/sections`);
     if (res.ok) {
-      const data = await res.json();
+      const data = res.data;
       setSections(data.sections || []);
       if (!selectedSectionId && data.sections?.[0]?.id) {
         setSelectedSectionId(data.sections[0].id);
@@ -481,8 +371,8 @@ export function TeacherWorkspace({
       if (!secId) return;
       setLoading(true);
       try {
-        const res = await fetch(`${apiBase}/sections/${secId}`);
-        const data = (await res.json()) as WorkspacePayload & { error?: string };
+        const res = await apiFetch(`${apiBase}/sections/${secId}`);
+        const data = res.data as WorkspacePayload & { error?: string };
         if (!res.ok) {
           showToast("err", data.error || "Failed to load section workspace.");
           return;
@@ -696,7 +586,7 @@ export function TeacherWorkspace({
     setQueueBusyId(sub.id);
     try {
       const feedbackText = queueFeedbacks[sub.id] ?? "";
-      const res = await fetch(`${apiBase}/submissions/review`, {
+      const res = await apiFetch(`${apiBase}/submissions/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -706,7 +596,7 @@ export function TeacherWorkspace({
           teacherFeedback: feedbackText,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Action failed.");
       } else {
@@ -737,6 +627,7 @@ export function TeacherWorkspace({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   function selectStampCardQuest(quest: WorkspaceQuestItem) {
     if (!activeStampCardStudent) return;
     const sub = submissionMap.get(`${activeStampCardStudent.id}:${quest.id}`);
@@ -745,6 +636,7 @@ export function TeacherWorkspace({
     setStampCardFeedback(sub?.teacherFeedback || "");
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   function requestStampCardAction(action: "STAMP" | "NEEDS_REVISION" | "RESET") {
     if (!activeStampCardStudent || !stampCardQuest) return;
     if (action === "RESET") {
@@ -769,7 +661,7 @@ export function TeacherWorkspace({
     if (!activeStampCardStudent || !stampCardQuest) return;
     setStampCardBusy(true);
     try {
-      const res = await fetch(`${apiBase}/submissions/review`, {
+      const res = await apiFetch(`${apiBase}/submissions/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -780,7 +672,7 @@ export function TeacherWorkspace({
           submissionUrl: stampCardUrl,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Could not update stamp.");
         return;
@@ -866,7 +758,7 @@ export function TeacherWorkspace({
     const feedbackText = cellFeedback;
     setCellBusy(true);
     try {
-      const res = await fetch(`${apiBase}/submissions/review`, {
+      const res = await apiFetch(`${apiBase}/submissions/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -877,7 +769,7 @@ export function TeacherWorkspace({
           submissionUrl: cellUrl,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Failed to update submission.");
         return;
@@ -916,6 +808,7 @@ export function TeacherWorkspace({
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   function openEditSectionModal() {
     if (!workspace) return;
     setEditSecCode(workspace.section.code);
@@ -935,7 +828,7 @@ export function TeacherWorkspace({
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+        const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -945,7 +838,7 @@ export function TeacherWorkspace({
             ...(isAdminOverride ? { teacherId: editSecTeacherId || null } : {}),
           }),
         });
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Could not update section.");
           return;
@@ -968,10 +861,10 @@ export function TeacherWorkspace({
       confirmLabel: "Delete Section",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+        const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
           method: "DELETE",
         });
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Failed to delete section.");
           return;
@@ -988,7 +881,7 @@ export function TeacherWorkspace({
 
   async function handleCreateSection(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch(`${apiBase}/sections`, {
+    const res = await apiFetch(`${apiBase}/sections`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -998,7 +891,7 @@ export function TeacherWorkspace({
         ...(isAdminOverride ? { teacherId: newSecTeacherId || null } : {}),
       }),
     });
-    const data = await res.json();
+    const data = res.data;
     if (!res.ok) {
       showToast("err", data.error || "Could not create section.");
       return;
@@ -1062,7 +955,7 @@ export function TeacherWorkspace({
         ? `${apiBase}/quests/${editingQuestId}`
         : `${apiBase}/quests`;
       const method = editingQuestId ? "PATCH" : "POST";
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1075,7 +968,7 @@ export function TeacherWorkspace({
           deadline: qDeadline ? new Date(qDeadline).toISOString() : null,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Failed to save quest.");
         return;
@@ -1089,7 +982,7 @@ export function TeacherWorkspace({
   }
 
   async function handleReorderQuest(questId: string, direction: "UP" | "DOWN") {
-    const res = await fetch(`${apiBase}/quests/${questId}/reorder`, {
+    const res = await apiFetch(`${apiBase}/quests/${questId}/reorder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ direction }),
@@ -1108,7 +1001,7 @@ export function TeacherWorkspace({
       confirmLabel: "Yes, Delete Task",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/quests/${quest.id}`, {
+        const res = await apiFetch(`${apiBase}/quests/${quest.id}`, {
           method: "DELETE",
         });
         if (res.ok) {
@@ -1134,7 +1027,7 @@ export function TeacherWorkspace({
       confirmLabel: nextVal ? "Yes, Reveal Leaderboard" : "Yes, Hide Leaderboard",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+        const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ leaderboardVisible: nextVal }),
@@ -1157,7 +1050,7 @@ export function TeacherWorkspace({
     if (!workspace) return;
     setDigestBusy(true);
     try {
-      const res = await fetch(`${apiBase}/sections/${workspace.section.id}`, {
+      const res = await apiFetch(`${apiBase}/sections/${workspace.section.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1165,7 +1058,7 @@ export function TeacherWorkspace({
           digestThreshold: Number(digestThresholdInput),
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Failed to update email settings.");
       } else {
@@ -1192,22 +1085,31 @@ export function TeacherWorkspace({
       onConfirm: async () => {
         setDigestBusy(true);
         try {
-          const res = await fetch(
+          const res = await apiFetch(
             `${apiBase}/sections/${workspace.section.id}/digest`,
             { method: "POST" }
           );
-          const data = await res.json();
+          const data = res.data;
           if (!res.ok) {
             showToast("err", data.error || "Failed to send summary email.");
-          } else if (!data.sent && data.submissionCount === 0) {
+          } else if (data.skipped) {
+            showToast("err", data.error || "A summary for this section is already being sent.");
+          } else if (data.submissionCount === 0) {
             showToast("err", "No new waiting student requests to summarize yet.");
-          } else {
+          } else if (data.deliveryStatus === "FAILED") {
+            showToast(
+              "err",
+              `The summary email was NOT sent: ${data.error || "delivery failed"} The ${data.submissionCount} requests stay in the queue.`
+            );
+            await loadWorkspace(workspace.section.id);
+          } else if (data.deliveryStatus === "PREVIEW_ONLY") {
             showToast(
               "ok",
-              `Combined ${data.submissionCount} requests into 1 summary (${formatDeliveryLabel(
-                data.deliveryStatus
-              )}).`
+              `Saved a preview of the summary (${data.submissionCount} requests). Preview mode doesn't send email, so these requests stay in the queue.`
             );
+            await loadWorkspace(workspace.section.id);
+          } else {
+            showToast("ok", `Emailed 1 summary covering ${data.submissionCount} requests.`);
             await loadWorkspace(workspace.section.id);
           }
         } finally {
@@ -1222,7 +1124,7 @@ export function TeacherWorkspace({
     if (!selectedSectionId) return;
     setStuBusy(true);
     try {
-      const res = await fetch(`${apiBase}/students`, {
+      const res = await apiFetch(`${apiBase}/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1233,20 +1135,26 @@ export function TeacherWorkspace({
           middleName: stuMiddle || null,
           courseCode: stuCourse || null,
           email: stuEmail,
-          defaultPassword: stuPass || undefined,
         }),
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Could not add student.");
         return;
       }
-      showToast(
-        "ok",
-        data.created
-          ? `Added & enrolled ${data.student.email} (temporary password: ${data.defaultPassword}).`
-          : `Enrolled existing student ${data.student.email} into this section.`
-      );
+      if (data.created && data.temporaryPassword) {
+        setIssuedCredentials([
+          {
+            name: `${data.student.lastName}, ${data.student.firstName}`,
+            email: data.student.email,
+            temporaryPassword: data.temporaryPassword,
+            expiresAt: data.temporaryPasswordExpiresAt,
+          },
+        ]);
+        showToast("ok", `Added & enrolled ${data.student.email}.`);
+      } else {
+        showToast("ok", `Enrolled existing student ${data.student.email} into this section.`);
+      }
       setStuId("");
       setStuLast("");
       setStuFirst("");
@@ -1266,20 +1174,36 @@ export function TeacherWorkspace({
     try {
       const form = new FormData();
       form.append("sectionId", selectedSectionId);
-      form.append("defaultPassword", importDefaultPass);
       form.append("file", importFile);
 
-      const res = await fetch(`${apiBase}/students/import`, {
+      const res = await apiFetch(`${apiBase}/students/import`, {
         method: "POST",
         body: form,
       });
-      const data = await res.json();
+      const data = res.data;
       if (!res.ok) {
         showToast("err", data.error || "Bulk upload failed.");
         return;
       }
-      setImportReport(data);
+      setImportReport(data as NonNullable<typeof importReport>);
       setImportFile(null);
+      const created = (data.credentials ?? []) as {
+        email: string;
+        lastName: string;
+        firstName: string;
+        temporaryPassword: string;
+        expiresAt: string;
+      }[];
+      if (created.length > 0) {
+        setIssuedCredentials(
+          created.map((c) => ({
+            name: `${c.lastName}, ${c.firstName}`,
+            email: c.email,
+            temporaryPassword: c.temporaryPassword,
+            expiresAt: c.expiresAt,
+          }))
+        );
+      }
       showToast(
         "ok",
         `Uploaded ${data.createdCount} new + ${data.enrolledExistingCount} existing students.`
@@ -1314,7 +1238,7 @@ export function TeacherWorkspace({
     moduleUrl: string
   ) {
     if (!selectedSectionId) return false;
-    const res = await fetch(`${apiBase}/students/assign-track`, {
+    const res = await apiFetch(`${apiBase}/students/assign-track`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1327,7 +1251,7 @@ export function TeacherWorkspace({
           finalsTrack === "OPENLEARNING_MODULE" ? moduleUrl : null,
       }),
     });
-    const data = await res.json();
+    const data = res.data;
     if (!res.ok) {
       showToast("err", data.error || "Failed to update track assignment.");
       return false;
@@ -1350,7 +1274,7 @@ export function TeacherWorkspace({
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`${apiBase}/students/${editStudentTarget.id}`, {
+        const res = await apiFetch(`${apiBase}/students/${editStudentTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1362,7 +1286,7 @@ export function TeacherWorkspace({
             email: editStuEmail,
           }),
         });
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Could not update student details.");
           return;
@@ -1390,28 +1314,28 @@ export function TeacherWorkspace({
     const target = editStudentTarget;
     askConfirm({
       title: "Reset Student Password?",
-      description: `Reset password for ${target.lastName}, ${target.firstName} to the starter password below. They will be asked to choose a personal password on next login.`,
-      highlightText: `${target.email}  →  ${resetNewPass}`,
+      description: `Give ${target.lastName}, ${target.firstName} a new random temporary password. Their current password and any signed-in sessions stop working. They choose a personal password at next sign-in.`,
+      highlightText: target.email,
       confirmLabel: "Yes, Reset Password",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(
+        const res = await apiFetch(
           `${apiBase}/students/${target.id}/reset-password`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ newPassword: resetNewPass }),
-          }
+          { method: "POST" }
         );
-        const data = await res.json();
+        const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Password reset failed.");
           return;
         }
-        showToast(
-          "ok",
-          `Temporary password reset for ${target.email}. They will change it on next login.`
-        );
+        setIssuedCredentials([
+          {
+            name: `${target.lastName}, ${target.firstName}`,
+            email: target.email,
+            temporaryPassword: data.temporaryPassword,
+            expiresAt: data.expiresAt,
+          },
+        ]);
         setEditStudentTarget(null);
         await loadWorkspace(selectedSectionId);
       },
@@ -1426,7 +1350,7 @@ export function TeacherWorkspace({
       confirmLabel: "Yes, Remove Student",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(
+        const res = await apiFetch(
           `${apiBase}/sections/${selectedSectionId}/enrollments/${st.id}`,
           { method: "DELETE" }
         );
@@ -2170,7 +2094,7 @@ export function TeacherWorkspace({
             </div>
           ) : (
             <div className="space-y-2.5">
-              {workspace.quests.map((q, idx) => (
+              {workspace.quests.map((q) => (
                 <div
                   key={q.id}
                   className="flex flex-col gap-3 border border-[#C6B393] bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -2329,6 +2253,36 @@ export function TeacherWorkspace({
       {/* TAB 6: EMAIL SUMMARY */}
       {workspace && activeTab === "digest" && (
         <div className="space-y-5">
+          {(() => {
+            const latest = workspace.digestLogs[0];
+            if (!latest || latest.deliveryStatus === "SENT") return null;
+            const failed = latest.deliveryStatus === "FAILED";
+            return (
+              <div
+                role="alert"
+                className={`flex items-start gap-2.5 border-l-4 px-4 py-3 text-xs ${
+                  failed
+                    ? "border-[#A92B2C] bg-[#FEE2E2] text-[#7F1D1D]"
+                    : "border-[#D97706] bg-[#FEF3C7] text-[#78350F]"
+                }`}
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <div className="font-bold">
+                    {failed
+                      ? "The last summary email was not sent."
+                      : "Summaries are only being saved as previews, not emailed."}
+                  </div>
+                  <p className="mt-0.5">
+                    {failed
+                      ? latest.errorMessage || "Email delivery failed."
+                      : "The email mode is set to Preview. Ask the RizLife administrator to configure Resend or SMTP."}{" "}
+                    Waiting requests stay in the queue until a summary is actually emailed.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="folio-panel p-5 space-y-4">
               <div className="flex items-center gap-2">
@@ -2478,20 +2432,28 @@ export function TeacherWorkspace({
                           {log.submissionCount}
                         </td>
                         <td className="px-3 py-2">
-                          <span className="border border-[#C6B393] bg-[#EFE6D2] px-2 py-0.5 text-[10px] font-bold">
+                          <span
+                            className={`border px-2 py-0.5 text-[10px] font-bold ${
+                              log.deliveryStatus === "SENT"
+                                ? "border-[#C6B393] bg-[#EFE6D2]"
+                                : log.deliveryStatus === "FAILED"
+                                ? "border-[#A92B2C] bg-[#FEE2E2] text-[#7F1D1D]"
+                                : "border-[#D97706] bg-[#FEF3C7] text-[#78350F]"
+                            }`}
+                          >
                             {formatDeliveryLabel(log.deliveryStatus)}
                           </span>
+                          {log.deliveryStatus === "FAILED" && log.errorMessage && (
+                            <div className="mt-1 max-w-[16rem] text-[10px] text-[#7F1D1D]">
+                              {log.errorMessage}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2">{log.subject}</td>
                         <td className="px-3 py-2 text-right">
                           <button
                             type="button"
-                            onClick={() =>
-                              setPreviewHtml({
-                                subject: log.subject,
-                                html: log.htmlPreview,
-                              })
-                            }
+                            onClick={() => void openDigestLogPreview(log.id)}
                             className="text-xs font-bold text-[#0E8F47] hover:underline cursor-pointer"
                           >
                             View Email
@@ -2697,7 +2659,7 @@ export function TeacherWorkspace({
               </label>
               <input
                 required
-                placeholder="e.g. 2024-140101"
+                placeholder="e.g. 2099-000001"
                 value={stuId}
                 onChange={(e) => setStuId(e.target.value)}
                 className="folio-input w-full px-3 py-2 font-mono text-xs"
@@ -2723,7 +2685,7 @@ export function TeacherWorkspace({
               </label>
               <input
                 required
-                placeholder="e.g. Alobin"
+                placeholder="e.g. Dela Cruz"
                 value={stuLast}
                 onChange={(e) => setStuLast(e.target.value)}
                 className="folio-input w-full px-3 py-2 text-xs"
@@ -2735,7 +2697,7 @@ export function TeacherWorkspace({
               </label>
               <input
                 required
-                placeholder="e.g. Vince Nelmar"
+                placeholder="e.g. Juan Miguel"
                 value={stuFirst}
                 onChange={(e) => setStuFirst(e.target.value)}
                 className="folio-input w-full px-3 py-2 text-xs"
@@ -2746,7 +2708,7 @@ export function TeacherWorkspace({
                 Middle Name
               </label>
               <input
-                placeholder="e.g. Pega"
+                placeholder="e.g. Reyes"
                 value={stuMiddle}
                 onChange={(e) => setStuMiddle(e.target.value)}
                 className="folio-input w-full px-3 py-2 text-xs"
@@ -2761,25 +2723,16 @@ export function TeacherWorkspace({
             <input
               required
               type="email"
-              placeholder="vpalobin@student.apc.edu.ph"
+              placeholder="jdelacruz@student.apc.edu.ph"
               value={stuEmail}
               onChange={(e) => setStuEmail(e.target.value)}
               className="folio-input w-full px-3 py-2 text-xs"
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-              Starter Default Password
-            </label>
-            <input
-              required
-              minLength={6}
-              value={stuPass}
-              onChange={(e) => setStuPass(e.target.value)}
-              className="folio-input w-full px-3 py-2 font-mono text-xs"
-            />
-          </div>
+          <p className="text-[11px] text-[#5E5246]">
+            A random temporary password is generated and shown once after the student is created.
+          </p>
 
           <button
             type="submit"
@@ -2816,18 +2769,10 @@ export function TeacherWorkspace({
             className="block w-full border border-dashed border-[#B59A6C] bg-[#EFE6D2] p-2.5 text-xs"
           />
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-              Starter Password for Uploaded Students
-            </label>
-            <input
-              required
-              minLength={6}
-              value={importDefaultPass}
-              onChange={(e) => setImportDefaultPass(e.target.value)}
-              className="folio-input w-full px-3 py-2 font-mono text-xs"
-            />
-          </div>
+          <p className="text-[11px] text-[#5E5246]">
+            Each new student gets their own random temporary password. You&apos;ll see them
+            once after the upload, with a CSV download. A password column in the file is ignored.
+          </p>
 
           <button
             type="submit"
@@ -3487,24 +3432,16 @@ export function TeacherWorkspace({
 
             <div className="space-y-2.5 border-t border-[#C6B393] pt-4">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                Reset Starter Password
+                Forgotten Password
               </label>
-              <div className="flex gap-2">
-                <input
-                  minLength={6}
-                  value={resetNewPass}
-                  onChange={(e) => setResetNewPass(e.target.value)}
-                  className="folio-input flex-1 px-3 py-2 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleResetStudentPasswordFromEdit}
-                  className="btn-heritage-ink px-3 py-2 text-xs"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Reset PW
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleResetStudentPasswordFromEdit}
+                className="btn-heritage-ink w-full px-3 py-2 text-xs"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Issue New Temporary Password
+              </button>
             </div>
 
             <div className="border-t border-[#C6B393] pt-4">
@@ -3648,6 +3585,16 @@ export function TeacherWorkspace({
           </div>
         </form>
       </ModalDrawer>
+
+      <TemporaryPasswordDialog
+        credentials={issuedCredentials}
+        onClose={() => setIssuedCredentials(null)}
+        title={
+          issuedCredentials && issuedCredentials.length > 1
+            ? "Temporary Passwords for New Students"
+            : "Temporary Password"
+        }
+      />
 
       <ConfirmDialog
         open={Boolean(confirmState)}

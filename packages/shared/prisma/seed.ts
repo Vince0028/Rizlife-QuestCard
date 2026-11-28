@@ -2,6 +2,29 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/password";
 
+/**
+ * This demo seed sets KNOWN passwords (they're in the README). Refuse to run it anywhere
+ * but a local development database unless explicitly forced.
+ */
+function assertDemoSeedAllowed() {
+  if (process.argv.includes("--force-demo")) return;
+  let host = "";
+  try {
+    host = new URL(process.env.DATABASE_URL ?? "").hostname;
+  } catch {
+    // unparsable/missing URL: Prisma will report it
+  }
+  const local = ["localhost", "127.0.0.1", "::1", "postgres", "db"].includes(host);
+  if (process.env.NODE_ENV === "production" || (host && !local)) {
+    console.error(
+      `Refusing to run the demo seed against ${host || "this database"}: it creates accounts with publicly known passwords.\n` +
+        "It is meant for a local Docker database. Pass --force-demo only for a throwaway database."
+    );
+    process.exit(1);
+  }
+}
+
+assertDemoSeedAllowed();
 const prisma = new PrismaClient();
 
 async function main() {
@@ -32,8 +55,8 @@ async function main() {
     update: {},
     create: {
       email: "admin@apc.edu.ph",
-      firstName: "Clarisse",
-      lastName: "Valdez",
+      firstName: "RizLife",
+      lastName: "Admin",
       role: "ADMIN",
       passwordHash: adminHash,
       mustChangePassword: false,
@@ -69,15 +92,15 @@ async function main() {
     },
   });
 
-  const vinceStudent = await prisma.user.upsert({
-    where: { email: "vpalobin@student.apc.edu.ph" },
+  const bsitDemoStudent = await prisma.user.upsert({
+    where: { email: "irivera@student.apc.edu.ph" },
     update: {},
     create: {
-      studentId: "2024-140001",
-      firstName: "Vince",
-      lastName: "Alobin",
+      studentId: "2099-140001",
+      firstName: "Isagani",
+      lastName: "Rivera",
       courseCode: "BSIT",
-      email: "vpalobin@student.apc.edu.ph",
+      email: "irivera@student.apc.edu.ph",
       passwordHash: studentHash,
       role: "STUDENT",
       mustChangePassword: false,
@@ -88,13 +111,13 @@ async function main() {
   await prisma.enrollment.upsert({
     where: {
       studentId_sectionId: {
-        studentId: vinceStudent.id,
+        studentId: bsitDemoStudent.id,
         sectionId: sectionBSIT.id,
       },
     },
     update: {},
     create: {
-      studentId: vinceStudent.id,
+      studentId: bsitDemoStudent.id,
       sectionId: sectionBSIT.id,
     },
   });
@@ -171,7 +194,7 @@ async function main() {
 
   const studentSpecs = [
     {
-      studentId: "2024-140101",
+      studentId: "2099-140101",
       firstName: "Juan",
       middleName: "Mercado",
       lastName: "Dela Cruz",
@@ -181,7 +204,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140102",
+      studentId: "2099-140102",
       firstName: "Maria",
       middleName: "Alonzo",
       lastName: "Santos",
@@ -191,7 +214,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140103",
+      studentId: "2099-140103",
       firstName: "Gabriel",
       middleName: "Reyes",
       lastName: "Alcantara",
@@ -201,7 +224,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140104",
+      studentId: "2099-140104",
       firstName: "Patricia",
       middleName: "Lim",
       lastName: "Tan",
@@ -211,7 +234,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140105",
+      studentId: "2099-140105",
       firstName: "Miguel",
       middleName: "Castillo",
       lastName: "Navarro",
@@ -221,7 +244,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140106",
+      studentId: "2099-140106",
       firstName: "Sophia",
       middleName: "Dizon",
       lastName: "Aquino",
@@ -231,7 +254,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140107",
+      studentId: "2099-140107",
       firstName: "Daniel",
       middleName: "Ocampo",
       lastName: "Soriano",
@@ -241,7 +264,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140108",
+      studentId: "2099-140108",
       firstName: "Camille",
       middleName: "Flores",
       lastName: "Pangilinan",
@@ -251,7 +274,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140109",
+      studentId: "2099-140109",
       firstName: "Lorenzo",
       middleName: "Torres",
       lastName: "Magsaysay",
@@ -261,7 +284,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140110",
+      studentId: "2099-140110",
       firstName: "Bianca",
       middleName: "Gomez",
       lastName: "Hernandez",
@@ -271,7 +294,7 @@ async function main() {
       sectionId: sectionIT241.id,
     },
     {
-      studentId: "2024-140201",
+      studentId: "2099-140201",
       firstName: "Carlo",
       middleName: "Bautista",
       lastName: "Ramos",
@@ -281,7 +304,7 @@ async function main() {
       sectionId: sectionIT242.id,
     },
     {
-      studentId: "2024-140202",
+      studentId: "2099-140202",
       firstName: "Alyssa",
       middleName: "Pineda",
       lastName: "Mercado",

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import {
   submitStudentQuest,
   toWorkspaceError,
@@ -12,6 +13,8 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
   const body = await req.json().catch(() => ({}));
 
@@ -19,6 +22,8 @@ export async function POST(req: NextRequest) {
     const { urlCheck, submission: updated } = await submitStudentQuest({
       studentUserId: session.userId,
       rawBody: body,
+      // The threshold digest (possibly an SMTP/Resend call) runs after the response.
+      scheduleDigestCheck: (task) => after(task),
     });
 
     return NextResponse.json({

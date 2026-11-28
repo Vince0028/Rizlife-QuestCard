@@ -1,4 +1,9 @@
-import type { LeaderboardEntry, SubmissionStatusValue } from "./types";
+import { formatManilaDateTime } from "./deadline";
+import type {
+  LeaderboardEntry,
+  StudentLeaderboardEntry,
+  SubmissionStatusValue,
+} from "./types";
 
 export interface LeaderboardStudentInput {
   id: string;
@@ -25,16 +30,34 @@ function toMs(val: Date | string | null | undefined): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
+/** Milestone time in Asia/Manila (never the server's timezone), e.g. "Nov 10, 04:00 PM". */
 export function formatSpeedTimestamp(iso: string | null): string {
-  if (!iso) return "No stamps yet";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "No stamps yet";
-  return d.toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return (
+    formatManilaDateTime(iso, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }) || "No stamps yet"
+  );
+}
+
+/**
+ * What a student may see about classmates: no student numbers, middle names, pending
+ * counts or internal tie-break values. `studentId` is the internal user id (the UI uses
+ * it to highlight "YOU"), not the school-issued student number.
+ */
+export function toStudentLeaderboardEntry(entry: LeaderboardEntry): StudentLeaderboardEntry {
+  return {
+    rank: entry.rank,
+    studentId: entry.studentId,
+    fullName: `${entry.lastName}, ${entry.firstName}`,
+    courseCode: entry.courseCode,
+    stampedCount: entry.stampedCount,
+    totalQuests: entry.totalQuests,
+    completionPct: entry.completionPct,
+    speedLabel: entry.speedLabel,
+  };
 }
 
 /**

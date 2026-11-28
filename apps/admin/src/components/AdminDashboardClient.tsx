@@ -3,13 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
-  Building2,
-  CheckCircle2,
   Edit3,
-  Feather,
   KeyRound,
   Layers,
-  Mail,
   Plus,
   RefreshCw,
   Settings,
@@ -20,6 +16,9 @@ import {
   Wrench,
 } from "lucide-react";
 import {
+  apiFetch,
+  TemporaryPasswordDialog,
+  type IssuedCredential,
   ConfirmDialog,
   LamparillaWreathWatermark,
   ModalDrawer,
@@ -28,71 +27,20 @@ import {
   RizalMonumentWatermark,
   TeacherWorkspace,
   VintageShell,
-  type WorkspaceSectionOption,
 } from "@rizlife/shared/ui";
-import type { RoleValue, SessionPayload } from "@rizlife/shared/types";
+import {
+  DIGEST_CRON_SCHEDULE_UTC,
+  DIGEST_SCHEDULE_LABEL,
+  type RoleValue,
+  type SessionPayload,
+} from "@rizlife/shared/types";
+import type {
+  AdminUserRow,
+  AdminSectionRow,
+  AdminOverviewResponse,
+  AdminTab,
+} from "./admin-dashboard-types";
 
-interface AdminUserRow {
-  id: string;
-  studentId: string | null;
-  firstName: string;
-  middleName: string | null;
-  lastName: string;
-  email: string;
-  role: RoleValue;
-  courseCode: string | null;
-  mustChangePassword: boolean;
-  isActive: boolean;
-  _count: { taughtSections: number; enrollments: number };
-}
-
-interface AdminSectionRow extends WorkspaceSectionOption {
-  leaderboardVisible: boolean;
-  digestThreshold: number;
-  digestEnabled: boolean;
-}
-
-interface AdminOverviewResponse {
-  metrics: {
-    totalStudents: number;
-    totalTeachers: number;
-    totalAdmins: number;
-    totalSections: number;
-    totalQuests: number;
-    stampedSubmissions: number;
-    pendingSubmissions: number;
-    digestsSent: number;
-  };
-  users: AdminUserRow[];
-  sections: AdminSectionRow[];
-  recentDigests: {
-    id: string;
-    sectionCode: string;
-    teacherName: string;
-    recipientEmail: string;
-    submissionCount: number;
-    triggerType: string;
-    deliveryStatus: string;
-    sentAt: string;
-  }[];
-  settings: {
-    activeTerm: string;
-    defaultDigestThreshold: number;
-    digestCronSchedule: string;
-    emailProvider: "preview" | "resend" | "smtp";
-    emailFromAddress: string;
-    allowedStudentDomain: string;
-    allowedStaffDomain: string;
-    microsoftSsoEnabled: boolean;
-  };
-  envStatus: {
-    microsoftSsoConfigured: boolean;
-    resendConfigured: boolean;
-    smtpConfigured: boolean;
-  };
-}
-
-type AdminTab = "overview" | "users" | "sections" | "settings" | "override";
 
 export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [tab, setTab] = useState<AdminTab>("overview");
@@ -101,7 +49,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [banner, setBanner] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
-  const [overrideSectionId, setOverrideSectionId] = useState<string | null>(null);
+  const [overrideSectionId] = useState<string | null>(null);
 
   // User provisioning & filters
   const [roleFilter, setRoleFilter] = useState<"ALL" | RoleValue>("ALL");
@@ -113,14 +61,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [newEmail, setNewEmail] = useState("");
   const [newStudentId, setNewStudentId] = useState("");
   const [newCourse, setNewCourse] = useState("");
-  const [newPassword, setNewPassword] = useState("Teacher@RizLife2026");
   const [assignSectionIds, setAssignSectionIds] = useState<string[]>([]);
   const [createUserBusy, setCreateUserBusy] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
 
-  // Reset password modal
-  const [resetUser, setResetUser] = useState<AdminUserRow | null>(null);
-  const [resetPwValue, setResetPwValue] = useState("RizLife@2026");
+  // Temporary passwords issued by create/reset, shown once
+  const [issuedCredentials, setIssuedCredentials] = useState<IssuedCredential[] | null>(null);
 
   // New section form
   const [secCode, setSecCode] = useState("");
@@ -198,9 +144,9 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const loadOverview = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/overview");
+      const res = await apiFetch("/api/admin/overview");
       if (res.ok) {
-        const json = (await res.json()) as AdminOverviewResponse;
+        const json = res.data as AdminOverviewResponse;
         setData(json);
         setSettingsForm(json.settings);
         setSecTerm(json.settings.activeTerm);
@@ -237,7 +183,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     e.preventDefault();
     setCreateUserBusy(true);
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await apiFetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -248,20 +194,23 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           email: newEmail,
           studentId: newRole === "STUDENT" ? newStudentId || null : null,
           courseCode: newRole === "STUDENT" ? newCourse || null : null,
-          password: newPassword || undefined,
-          mustChangePassword: true,
           assignSectionIds: newRole === "TEACHER" ? assignSectionIds : undefined,
         }),
       });
-      const json = await res.json();
+      const json = res.data;
       if (!res.ok) {
         showToast("err", json.error || "Failed to create account.");
         return;
       }
-      showToast(
-        "ok",
-        `Created ${json.user.role} account ${json.user.email} (temporary password: ${json.temporaryPassword}).`
-      );
+      setIssuedCredentials([
+        {
+          name: `${json.user.lastName}, ${json.user.firstName}`,
+          email: json.user.email,
+          temporaryPassword: json.temporaryPassword,
+          expiresAt: json.temporaryPasswordExpiresAt,
+        },
+      ]);
+      showToast("ok", `Created ${json.user.role} account ${json.user.email}.`);
       setNewFirst("");
       setNewMiddle("");
       setNewLast("");
@@ -285,7 +234,6 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     setEditUserRole(u.role);
     setEditUserStudentId(u.studentId || "");
     setEditUserCourse(u.courseCode || "");
-    setResetPwValue("RizLife@2026");
   }
 
   function requestSaveUserEdit(e: React.FormEvent) {
@@ -298,7 +246,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${editUserTarget.id}`, {
+        const res = await apiFetch(`/api/admin/users/${editUserTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -311,7 +259,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             courseCode: editUserRole === "STUDENT" ? editUserCourse || null : null,
           }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Could not update user.");
           return;
@@ -334,12 +282,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: nextActive ? "Yes, Activate" : "Yes, Deactivate",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${target.id}`, {
+        const res = await apiFetch(`/api/admin/users/${target.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ isActive: nextActive }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Could not update user.");
           return;
@@ -361,10 +309,10 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Yes, Delete Account",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${target.id}`, {
+        const res = await apiFetch(`/api/admin/users/${target.id}`, {
           method: "DELETE",
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Could not delete user.");
           return;
@@ -381,22 +329,27 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     const target = editUserTarget;
     askConfirm({
       title: "Reset Account Password?",
-      description: `Set temporary password for ${target.lastName}, ${target.firstName}. They will be forced to choose a new password on next sign in.`,
-      highlightText: `${target.email}  →  ${resetPwValue}`,
+      description: `Give ${target.lastName}, ${target.firstName} a new random temporary password. Their current password and signed-in sessions stop working; they choose a new password at next sign-in.`,
+      highlightText: target.email,
       confirmLabel: "Yes, Reset Password",
       variant: "warning",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/users/${target.id}/reset-password`, {
+        const res = await apiFetch(`/api/admin/users/${target.id}/reset-password`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ newPassword: resetPwValue }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Password reset failed.");
           return;
         }
-        showToast("ok", `Temporary password reset for ${target.email}.`);
+        setIssuedCredentials([
+          {
+            name: `${target.lastName}, ${target.firstName}`,
+            email: target.email,
+            temporaryPassword: json.temporaryPassword,
+            expiresAt: json.expiresAt,
+          },
+        ]);
         setEditUserTarget(null);
         await loadOverview();
       },
@@ -405,7 +358,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
 
   async function handleCreateSection(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch("/api/workspace/sections", {
+    const res = await apiFetch("/api/workspace/sections", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -415,7 +368,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
         teacherId: secTeacherId || null,
       }),
     });
-    const json = await res.json();
+    const json = res.data;
     if (!res.ok) {
       showToast("err", json.error || "Failed to create section.");
       return;
@@ -427,8 +380,9 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     await loadOverview();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: not wired to any control yet (see QA-REPORT.md follow-ups)
   async function handleReassignTeacher(sectionId: string, teacherId: string) {
-    const res = await fetch(`/api/workspace/sections/${sectionId}`, {
+    const res = await apiFetch(`/api/workspace/sections/${sectionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teacherId: teacherId || null }),
@@ -461,7 +415,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Save Changes",
       variant: "primary",
       onConfirm: async () => {
-        const res = await fetch(`/api/workspace/sections/${editSecTarget.id}`, {
+        const res = await apiFetch(`/api/workspace/sections/${editSecTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -472,7 +426,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             digestThreshold: Number(editSecThreshold),
           }),
         });
-        const json = await res.json();
+        const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Failed to update section.");
           return;
@@ -494,7 +448,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       confirmLabel: "Yes, Delete Section",
       variant: "danger",
       onConfirm: async () => {
-        const res = await fetch(`/api/admin/sections/${sec.id}`, {
+        const res = await apiFetch(`/api/admin/sections/${sec.id}`, {
           method: "DELETE",
         });
         if (res.ok) {
@@ -521,12 +475,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
       onConfirm: async () => {
         setSettingsBusy(true);
         try {
-          const res = await fetch("/api/admin/settings", {
+          const res = await apiFetch("/api/admin/settings", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(settingsForm),
           });
-          const json = await res.json();
+          const json = res.data;
           if (!res.ok) {
             showToast("err", json.error || "Failed to save system settings.");
           } else {
@@ -541,7 +495,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await apiFetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
 
@@ -733,9 +687,11 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                           : "border-[#D4AB50] bg-[#FEF3C7] text-[#78350F]"
                       }`}
                     >
-                      {data.envStatus.microsoftSsoConfigured
-                        ? "Connected"
-                        : "Awaiting IT Tenant Keys"}
+                      {!data.envStatus.microsoftSsoConfigured
+                        ? "Awaiting IT Tenant Keys"
+                        : data.settings.microsoftSsoEnabled
+                        ? "On"
+                        : "Configured, Off"}
                     </span>
                   </div>
                 </div>
@@ -1044,7 +1000,48 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
                   <option value="resend">Resend API</option>
                   <option value="smtp">SMTP / Outlook Relay</option>
                 </select>
+                {settingsForm.emailProvider === "resend" && !data.envStatus.resendConfigured && (
+                  <p className="mt-1 text-[11px] font-semibold text-[#A92B2C]">
+                    RESEND_API_KEY isn&apos;t set on this deployment: digests will fail and stay queued.
+                  </p>
+                )}
+                {settingsForm.emailProvider === "smtp" && !data.envStatus.smtpConfigured && (
+                  <p className="mt-1 text-[11px] font-semibold text-[#A92B2C]">
+                    SMTP_HOST / SMTP_USER / SMTP_PASS aren&apos;t all set: digests will fail and stay queued.
+                  </p>
+                )}
               </div>
+
+              <div>
+                <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
+                  Scheduled Digest
+                </span>
+                <div className="folio-tonal px-3 py-2 text-xs text-[#16192C]">
+                  {DIGEST_SCHEDULE_LABEL}{" "}
+                  <span className="font-mono text-[10px] text-[#5E5246]">
+                    (cron {DIGEST_CRON_SCHEDULE_UTC} UTC, set in apps/teacher/vercel.json)
+                  </span>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2.5 text-xs text-[#16192C]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={settingsForm.microsoftSsoEnabled}
+                  onChange={(e) =>
+                    setSettingsForm({ ...settingsForm, microsoftSsoEnabled: e.target.checked })
+                  }
+                />
+                <span>
+                  <span className="font-bold">Allow &quot;Sign in with APC Microsoft Account&quot;</span>
+                  <span className="block text-[11px] text-[#5E5246]">
+                    {data.envStatus.microsoftSsoConfigured
+                      ? "Entra ID keys are configured. This switch shows or hides the button on all 3 portals."
+                      : "Has no effect until IT provides the AZURE_AD_* keys for this deployment."}
+                  </span>
+                </span>
+              </label>
 
               <button
                 type="submit"
@@ -1086,13 +1083,6 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
               onChange={(e) => {
                 const role = e.target.value as RoleValue;
                 setNewRole(role);
-                setNewPassword(
-                  role === "TEACHER"
-                    ? "Teacher@RizLife2026"
-                    : role === "ADMIN"
-                    ? "Admin@RizLife2026"
-                    : "Student@2026"
-                );
               }}
               className="folio-input w-full px-3 py-2 text-xs font-bold"
             >
@@ -1161,7 +1151,7 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           {newRole === "STUDENT" && (
             <div className="grid gap-2 sm:grid-cols-2">
               <input
-                placeholder="Student ID (2024-140...)"
+                placeholder="Student ID (e.g. 2099-000001)"
                 value={newStudentId}
                 onChange={(e) => setNewStudentId(e.target.value)}
                 className="folio-input px-3 py-2 text-xs"
@@ -1219,18 +1209,10 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             </div>
           )}
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-              Temporary Default Password
-            </label>
-            <input
-              required
-              minLength={6}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="folio-input w-full px-3 py-2 font-mono text-xs"
-            />
-          </div>
+          <p className="text-[11px] text-[#5E5246]">
+            A random temporary password is generated and shown once after the account is
+            created. It expires after 7 days if unused.
+          </p>
 
           <button
             type="submit"
@@ -1394,24 +1376,16 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
 
             <div className="space-y-2.5 border-t border-[#C6B393] pt-4">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                Reset Temporary Password
+                Forgotten Password
               </label>
-              <div className="flex gap-2">
-                <input
-                  minLength={6}
-                  value={resetPwValue}
-                  onChange={(e) => setResetPwValue(e.target.value)}
-                  className="folio-input flex-1 px-3 py-2 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleResetUserPasswordFromEdit}
-                  className="btn-heritage-ink px-3 py-2 text-xs"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Reset PW
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleResetUserPasswordFromEdit}
+                className="btn-heritage-ink w-full px-3 py-2 text-xs"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Issue New Temporary Password
+              </button>
             </div>
 
             {editUserTarget.id !== user.userId && (
@@ -1519,6 +1493,11 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           </form>
         )}
       </ModalDrawer>
+
+      <TemporaryPasswordDialog
+        credentials={issuedCredentials}
+        onClose={() => setIssuedCredentials(null)}
+      />
 
       <ConfirmDialog
         open={Boolean(confirmState)}

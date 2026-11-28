@@ -90,6 +90,26 @@ export function formatQuestDeadline(
   return (includeYear ? dateTimeFormatter : shortDateTimeFormatter).format(d);
 }
 
+/**
+ * Server-side formatting must never depend on the host's timezone (Vercel runs in UTC).
+ * These mirror `toLocaleDateString("en-PH")` / `toLocaleString("en-PH")` but always in
+ * Asia/Manila. Missing or invalid values give "".
+ */
+export function formatManilaDate(value: string | Date | null | undefined): string {
+  const d = parseDeadline(value);
+  return d ? d.toLocaleDateString("en-PH", { timeZone: QUEST_DEADLINE_TIME_ZONE }) : "";
+}
+
+export function formatManilaDateTime(
+  value: string | Date | null | undefined,
+  options: Intl.DateTimeFormatOptions = {}
+): string {
+  const d = parseDeadline(value);
+  return d
+    ? d.toLocaleString("en-PH", { ...options, timeZone: QUEST_DEADLINE_TIME_ZONE })
+    : "";
+}
+
 /** "11:59 PM" in Manila time. */
 export function formatQuestDeadlineTime(value: string | Date | null | undefined): string {
   const d = parseDeadline(value);

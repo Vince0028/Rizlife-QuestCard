@@ -5,6 +5,12 @@ import ExcelJS from "exceljs";
 import { runSubmissionLifecycleChecks } from "./submission-lifecycle";
 import { runMicrosoftSsoChecks } from "./sso-callback";
 import { runDeadlineStateChecks } from "./deadline-states";
+import { runAdapterLazyColumnChecks } from "./adapter-lazy-columns";
+import { runRouteAuthChecks } from "./route-auth";
+import { runHardeningChecks } from "./hardening";
+import { runTimezoneAndPrivacyChecks } from "./timezone-privacy";
+import { runSessionRevocationChecks } from "./session-revocation";
+import { runAuthHardeningChecks } from "./auth-hardening";
 import { signSessionToken, verifySessionToken } from "../auth";
 import { hashPassword, verifyPassword } from "../password";
 import { createSectionSchema, validateSubmissionUrl } from "../validation";
@@ -27,7 +33,7 @@ async function run() {
     role: "STUDENT",
     firstName: "Juan",
     lastName: "Dela Cruz",
-    studentId: "2024-140101",
+    studentId: "2099-000001",
     courseCode: "BSIT",
     mustChangePassword: false,
     portal: "student",
@@ -68,21 +74,21 @@ async function run() {
     [
       {
         id: "s_late",
-        studentId: "2024-140102",
+        studentId: "2099-000002",
         firstName: "Patricia",
         lastName: "Tan",
         courseCode: "BSIT-MI",
       },
       {
         id: "s_fast",
-        studentId: "2024-140101",
+        studentId: "2099-000001",
         firstName: "Gabriel",
         lastName: "Alcantara",
         courseCode: "BSIT",
       },
       {
         id: "s_zero",
-        studentId: "2024-140103",
+        studentId: "2099-000003",
         firstName: "Marco",
         lastName: "Zero",
         courseCode: "BSCS",
@@ -132,7 +138,7 @@ async function run() {
           {
             submissionId: "sub_1",
             studentName: "Dela Cruz, Juan",
-            studentNumber: "2024-140101",
+            studentNumber: "2099-000001",
             submittedAt: new Date().toISOString(),
             submissionUrl: "https://www.openlearning.com/apc/1",
           },
@@ -179,7 +185,7 @@ async function run() {
     students: [
       {
         id: "s1",
-        studentId: "2024-140101",
+        studentId: "2099-000001",
         firstName: "Juan",
         middleName: "M.",
         lastName: "Dela Cruz",
@@ -220,7 +226,7 @@ async function run() {
     students: [
       {
         id: "s1",
-        studentId: "2024-140101",
+        studentId: "2099-000001",
         firstName: "Juan",
         middleName: "M.",
         lastName: "Dela Cruz",
@@ -230,7 +236,7 @@ async function run() {
     ],
     submissions: [],
   });
-  assert.ok(csvOut.includes("2024-140101"));
+  assert.ok(csvOut.includes("2099-000001"));
 
   const template = generateStudentImportCsvTemplate();
   const parsedImport = await parseStudentImportFile(
@@ -239,10 +245,10 @@ async function run() {
   );
   assert.equal(parsedImport.errors.length, 0);
   assert.equal(parsedImport.rows.length, 2);
-  assert.equal(parsedImport.rows[0].studentId, "2024-140101");
-  assert.equal(parsedImport.rows[0].lastName, "Alobin");
-  assert.equal(parsedImport.rows[0].firstName, "Vince Nelmar");
-  assert.equal(parsedImport.rows[0].middleName, "Pega");
+  assert.equal(parsedImport.rows[0].studentId, "2099-000001");
+  assert.equal(parsedImport.rows[0].lastName, "Dela Cruz");
+  assert.equal(parsedImport.rows[0].firstName, "Juan Miguel");
+  assert.equal(parsedImport.rows[0].middleName, "Reyes");
 
   // 8. Submission lifecycle (resubmit after revision, stamped lock) + threshold digest
   await runSubmissionLifecycleChecks();
@@ -252,6 +258,25 @@ async function run() {
 
   // 10. Quest deadline states (Overdue / Due today / Due soon) in Asia/Manila days
   runDeadlineStateChecks();
+
+  // 11. HTTP layer: workspace route authorization (401/403/2xx) + portal middleware
+  await runRouteAuthChecks();
+
+  // 12. Edge-case guards: admin routes, settings/cron, finals track, quest validation, errors
+  await runHardeningChecks();
+
+  // 13. Asia/Manila timestamps on UTC hosts + student-safe leaderboard rows
+  await runTimezoneAndPrivacyChecks();
+
+  // 14. Session revocation (H3) + fail-closed cron authorization (M1)
+  await runSessionRevocationChecks();
+
+  // 15. Login enumeration/lockout/throttle, temp passwords, policy, API gate, rotation
+  await runAuthHardeningChecks();
+
+  // 16. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
+  //     Keep last: it points the adapter at a fake PostgREST for its duration.
+  await runAdapterLazyColumnChecks();
 
   console.log("ALL CORE VERIFICATION CHECKS PASSED!");
 }

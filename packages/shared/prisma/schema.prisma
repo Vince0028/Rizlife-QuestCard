@@ -47,6 +47,15 @@ model User {
   mustChangePassword Boolean  @default(false)
   isActive           Boolean  @default(true)
   microsoftOid       String?  @unique
+  /// Bumped to revoke every existing session (password change/reset, deactivation,
+  /// role change). Session tokens carry the value they were issued with.
+  sessionVersion     Int      @default(0)
+  /// When the current temporary password stops working (null = not a temporary one).
+  tempPasswordExpiresAt DateTime?
+  /// Consecutive failed password sign-ins; reset on success.
+  failedLoginCount   Int      @default(0)
+  /// Password sign-in is refused until this time (set after repeated failures).
+  lockedUntil        DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -66,6 +75,8 @@ model Section {
   leaderboardVisible Boolean   @default(false)
   digestThreshold    Int       @default(20)
   digestEnabled      Boolean   @default(true)
+  /// Start of the latest digest *attempt* (atomic claim + cooldown marker, see digest.ts).
+  /// The last successfully emailed digest is the newest EmailDigestLog with deliveryStatus SENT.
   lastDigestSentAt   DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

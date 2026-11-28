@@ -315,15 +315,53 @@ async function dispatchEmail(params: {
     }
   }
 
-  // Fallback: record preview cleanly without failing teacher workflow
-  if (params.provider === "resend" && !resendKey) {
-    return { status: "PREVIEW_ONLY" };
+  // A real provider is selected but its credentials are missing: nothing was emailed,
+  // so report it as FAILED (the submissions stay queued for the next digest).
+  if (params.provider === "resend") {
+    return {
+      status: "FAILED",
+      error:
+        "Email mode is Resend, but RESEND_API_KEY is not set on this deployment. Nothing was emailed.",
+    };
   }
-  if (params.provider === "smtp" && (!smtpHost || !smtpUser)) {
-    return { status: "PREVIEW_ONLY" };
+  if (params.provider === "smtp") {
+    return {
+      status: "FAILED",
+      error:
+        "Email mode is SMTP, but SMTP_HOST / SMTP_USER / SMTP_PASS are not all set on this deployment. Nothing was emailed.",
+    };
   }
 
+  // Preview mode: the email is only recorded in EmailDigestLog for the teacher to view.
   return { status: "PREVIEW_ONLY" };
+}
+
+/**
+ * Digest concurrency guard.
+ *
+ * `Section.lastDigestSentAt` holds the start time of the latest digest *attempt* (the
+ * workspace reports the latest successful send from EmailDigestLog instead). A send
+ * first claims the section with a single conditional UPDATE, which is atomic in
+ * Postgres (DATABASE_URL), so two instances can't both email the same batch. The
+ * in-process map covers concurrent requests inside one instance, which is also where
+ * the PostgREST/local-JSON adapter's updateMany isn't atomic.
+ */
+const DIGEST_IN_PROGRESS_MS = 2 * 60_000;
+/** Threshold digests fire at most this often per section (each submission re-checks). */
+export const THRESHOLD_DIGEST_COOLDOWN_MS = 15 * 60_000;
+const inflightDigests = new Set<string>();
+
+async function claimDigestSlot(sectionId: string, windowMs: number): Promise<boolean> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - windowMs);
+  const { count } = await prisma.section.updateMany({
+    where: {
+      id: sectionId,
+      OR: [{ lastDigestSentAt: null }, { lastDigestSentAt: { lt: cutoff } }],
+    },
+    data: { lastDigestSentAt: now },
+  });
+  return count === 1;
 }
 
 export async function sendSectionDigest(
@@ -335,7 +373,29 @@ export async function sendSectionDigest(
   deliveryStatus?: string;
   logId?: string;
   error?: string;
+  /** True when another digest for this section is running or ran within the guard window. */
+  skipped?: boolean;
 }> {
+  if (inflightDigests.has(sectionId)) {
+    return {
+      sent: false,
+      submissionCount: 0,
+      skipped: true,
+      error: "A digest for this section is already being sent. Try again in a minute.",
+    };
+  }
+  inflightDigests.add(sectionId);
+  try {
+    return await sendSectionDigestUnguarded(sectionId, triggerType);
+  } finally {
+    inflightDigests.delete(sectionId);
+  }
+}
+
+async function sendSectionDigestUnguarded(
+  sectionId: string,
+  triggerType: "THRESHOLD" | "SCHEDULED" | "MANUAL"
+) {
   const section = await prisma.section.findUnique({
     where: { id: sectionId },
     include: { teacher: true },
@@ -373,6 +433,20 @@ export async function sendSectionDigest(
 
   if (pendingRows.length === 0) {
     return { sent: false, submissionCount: 0 };
+  }
+
+  const windowMs =
+    triggerType === "THRESHOLD" ? THRESHOLD_DIGEST_COOLDOWN_MS : DIGEST_IN_PROGRESS_MS;
+  if (!(await claimDigestSlot(section.id, windowMs))) {
+    return {
+      sent: false,
+      submissionCount: 0,
+      skipped: true,
+      error:
+        triggerType === "THRESHOLD"
+          ? undefined
+          : "A digest for this section was started moments ago. Try again in a couple of minutes.",
+    };
   }
 
   const settings = await prisma.systemSetting.findUnique({
@@ -414,14 +488,12 @@ export async function sendSectionDigest(
   const now = new Date();
 
   const log = await prisma.$transaction(async (tx) => {
-    if (dispatch.status !== "FAILED") {
+    // Only a delivered email takes submissions out of the queue. Preview/failed
+    // attempts leave them for the next real send (and are visible in the log).
+    if (dispatch.status === "SENT") {
       await tx.submission.updateMany({
         where: { id: { in: submissionIds } },
         data: { includedInDigest: true },
-      });
-      await tx.section.update({
-        where: { id: section.id },
-        data: { lastDigestSentAt: now },
       });
     }
 
@@ -442,7 +514,7 @@ export async function sendSectionDigest(
   });
 
   return {
-    sent: dispatch.status !== "FAILED",
+    sent: dispatch.status === "SENT",
     submissionCount: pendingRows.length,
     deliveryStatus: dispatch.status,
     logId: log.id,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, isKnownDefaultPassword } from "./password-policy";
 
 export interface UrlValidationResult {
   valid: boolean;
@@ -86,8 +87,11 @@ export const changePasswordSchema = z
     currentPassword: z.string().optional().default(""),
     newPassword: z
       .string()
-      .min(8, "New password must be at least 8 characters long.")
-      .max(128),
+      .min(MIN_PASSWORD_LENGTH, `New password must be at least ${MIN_PASSWORD_LENGTH} characters long.`)
+      .max(MAX_PASSWORD_LENGTH)
+      .refine((p) => !isKnownDefaultPassword(p), {
+        message: "That password is publicly known. Choose a different one.",
+      }),
     confirmPassword: z.string(),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -129,7 +133,6 @@ export const createStudentSchema = z.object({
   lastName: z.string().trim().min(1, "Last name is required.").max(80),
   courseCode: z.string().trim().max(30).optional().nullable(),
   email: z.string().trim().email("Valid APC student email required.").toLowerCase(),
-  defaultPassword: z.string().min(6).max(128).optional(),
 });
 
 export const updateStudentSchema = z.object({
@@ -143,7 +146,10 @@ export const updateStudentSchema = z.object({
 
 export const updateEnrollmentTrackSchema = z.object({
   sectionId: z.string().min(1, "Section ID is required."),
-  studentIds: z.array(z.string().min(1)).min(1, "At least one student must be selected."),
+  studentIds: z
+    .array(z.string().min(1).max(64))
+    .min(1, "At least one student must be selected.")
+    .max(500, "Assign at most 500 students at a time."),
   finalsTrack: z.enum(["UNDECIDED", "SYSTEM", "OPENLEARNING_MODULE"]),
   assignedModuleTitle: z.string().trim().max(180).optional().nullable(),
   assignedModuleUrl: z.string().trim().max(500).optional().nullable(),
@@ -175,15 +181,25 @@ export const createUserAdminSchema = z.object({
   lastName: z.string().trim().min(1).max(80),
   courseCode: z.string().trim().max(30).optional().nullable(),
   email: z.string().trim().email().toLowerCase(),
-  password: z.string().min(6).max(128).optional(),
-  mustChangePassword: z.boolean().optional(),
-  assignSectionIds: z.array(z.string()).optional(),
+  assignSectionIds: z.array(z.string().max(64)).max(100).optional(),
+});
+
+export const updateUserAdminSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required.").max(80).optional(),
+  middleName: z.string().trim().max(80).optional().nullable(),
+  lastName: z.string().trim().min(1, "Last name is required.").max(80).optional(),
+  email: z.string().trim().email("Enter a valid email address.").toLowerCase().optional(),
+  studentId: z.string().trim().max(40).optional().nullable(),
+  courseCode: z.string().trim().max(30).optional().nullable(),
+  role: z.enum(["STUDENT", "TEACHER", "ADMIN"]).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const systemSettingsSchema = z.object({
   activeTerm: z.string().trim().min(2).max(80),
   defaultDigestThreshold: z.coerce.number().int().min(1).max(200),
-  digestCronSchedule: z.string().trim().min(5).max(50),
+  /** Ignored on save: the schedule is fixed by apps/teacher/vercel.json. */
+  digestCronSchedule: z.string().trim().max(50).optional(),
   emailProvider: z.enum(["preview", "resend", "smtp"]),
   emailFromAddress: z.string().trim().min(3).max(160),
   allowedStudentDomain: z.string().trim().min(3).max(100).toLowerCase(),

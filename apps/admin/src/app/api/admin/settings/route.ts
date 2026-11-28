@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { prisma } from "@rizlife/shared/db";
-import { systemSettingsSchema } from "@rizlife/shared/validation";
+import { saveSystemSettings } from "@rizlife/shared/admin-service";
+import { toWorkspaceError } from "@rizlife/shared/workspace-service";
 import { getAdminSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +10,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
   const settings = await prisma.systemSetting.upsert({
     where: { id: "global" },
     update: {},
@@ -19,21 +23,14 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
-  const body = await req.json().catch(() => ({}));
-  const parsed = systemSettingsSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message || "Invalid system settings." },
-      { status: 400 }
-    );
+  try {
+    const settings = await saveSystemSettings(await req.json().catch(() => ({})));
+    return NextResponse.json({ settings });
+  } catch (err) {
+    const e = toWorkspaceError(err);
+    return NextResponse.json({ error: e.message }, { status: e.status });
   }
-
-  const settings = await prisma.systemSetting.upsert({
-    where: { id: "global" },
-    update: parsed.data,
-    create: { id: "global", ...parsed.data },
-  });
-
-  return NextResponse.json({ settings });
 }

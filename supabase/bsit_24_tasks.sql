@@ -1,19 +1,11 @@
 -- ============================================================================
--- RizLife QuestCard — Add 24 Tasks to Section BSIT (First Teacher & Vince Alobin)
+-- RizLife QuestCard — Add 24 Tasks to Section BSIT241 (demo teacher & demo student)
 -- Paste into: Supabase Dashboard -> SQL Editor -> New Query -> Run
 -- Safe to re-run multiple times (idempotent upsert by sectionId + taskNumber).
 -- ============================================================================
 
--- 1. Ensure Section BSIT (assigned to usr_teacher_01) and Vince's profile & enrollment exist
-UPDATE "User"
-SET
-  "studentId" = '2024-140101',
-  "lastName" = 'Alobin',
-  "firstName" = 'Vince Nelmar',
-  "middleName" = 'Pega',
-  "courseCode" = 'BSIT',
-  "updatedAt" = CURRENT_TIMESTAMP
-WHERE "email" = 'vpalobin@student.apc.edu.ph';
+-- 1. Ensure Section BSIT241 (assigned to usr_teacher_01) and the demo student's
+--    enrollment exist (the demo student itself is created by setup.sql).
 
 INSERT INTO "Section" (
   "id",
@@ -51,13 +43,13 @@ INSERT INTO "Enrollment" (
   "enrolledAt"
 )
 SELECT
-  'enr_vince_bsit',
+  'enr_demo_bsit',
   u."id",
   s."id",
   CURRENT_TIMESTAMP
 FROM "User" u
 JOIN "Section" s ON s."id" = 'sec_bsit_t2'
-WHERE u."email" = 'vpalobin@student.apc.edu.ph'
+WHERE u."email" = 'jdelacruz@student.apc.edu.ph'
 ON CONFLICT ("studentId", "sectionId") DO NOTHING;
 
 -- 2. Insert / Update the 24 Quest Card Tasks for Section BSIT241
@@ -178,7 +170,7 @@ SET
   "updatedAt" = CURRENT_TIMESTAMP;
 
 -- 3. Grant Supabase API Permissions (so SUPABASE_URL + SUPABASE_SECRET_KEY sync directly)
-GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;

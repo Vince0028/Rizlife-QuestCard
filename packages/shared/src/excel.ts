@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { formatManilaDate, formatManilaDateTime } from "./deadline";
 import type {
   StudentImportParseResult,
   StudentImportRow,
@@ -208,8 +209,8 @@ export async function generateTrackerWorkbook(params: {
       q.taskNumber,
       q.title,
       q.category,
-      q.startDate ? new Date(q.startDate).toLocaleDateString("en-PH") : "",
-      q.deadline ? new Date(q.deadline).toLocaleDateString("en-PH") : "",
+      formatManilaDate(q.startDate),
+      formatManilaDate(q.deadline),
       q.openlearningUrl ?? "",
     ]);
   }
@@ -240,11 +241,8 @@ export async function generateTrackerWorkbook(params: {
   const studentById = new Map(params.students.map((s) => [s.id, s]));
   const questById = new Map(params.quests.map((q) => [q.id, q]));
 
-  const fmtTs = (v: Date | string | null | undefined) => {
-    if (!v) return "";
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-PH");
-  };
+  // Asia/Manila regardless of the server's timezone (Vercel runs in UTC).
+  const fmtTs = (v: Date | string | null | undefined) => formatManilaDateTime(v);
 
   const trackedSubs = params.submissions
     .filter(
@@ -352,11 +350,25 @@ export function generateTrackerCsv(params: {
   return lines.join("\r\n");
 }
 
-function parseCsvLines(text: string): string[][] {
-  const rows: string[][] = [];
+interface SourceRow {
+  cells: string[];
+  /** 1-based line (CSV) or sheet row (XLSX) where this record starts. */
+  rowNumber: number;
+}
+
+function parseCsvLines(text: string): SourceRow[] {
+  const rows: SourceRow[] = [];
   let row: string[] = [];
   let current = "";
   let inQuotes = false;
+  let line = 1;
+  let rowStart = 1;
+  const endRow = () => {
+    row.push(current.trim());
+    if (row.some((c) => c.length > 0)) rows.push({ cells: row, rowNumber: rowStart });
+    row = [];
+    current = "";
+  };
 
   const cleanText = text.replace(/^\uFEFF/, "");
 
@@ -365,6 +377,7 @@ function parseCsvLines(text: string): string[][] {
     const next = cleanText[i + 1];
 
     if (inQuotes) {
+      if (ch === "\n") line += 1; // a newline inside a quoted cell still advances the file line
       if (ch === '"' && next === '"') {
         current += '"';
         i += 1;
@@ -380,26 +393,21 @@ function parseCsvLines(text: string): string[][] {
         row.push(current.trim());
         current = "";
       } else if (ch === "\r" && next === "\n") {
-        row.push(current.trim());
-        if (row.some((c) => c.length > 0)) rows.push(row);
-        row = [];
-        current = "";
+        endRow();
         i += 1;
+        line += 1;
+        rowStart = line;
       } else if (ch === "\n" || ch === "\r") {
-        row.push(current.trim());
-        if (row.some((c) => c.length > 0)) rows.push(row);
-        row = [];
-        current = "";
+        endRow();
+        line += 1;
+        rowStart = line;
       } else {
         current += ch;
       }
     }
   }
 
-  if (current.length > 0 || row.length > 0) {
-    row.push(current.trim());
-    if (row.some((c) => c.length > 0)) rows.push(row);
-  }
+  if (current.length > 0 || row.length > 0) endRow();
 
   return rows;
 }
@@ -424,7 +432,7 @@ export async function parseStudentImportFile(
   buffer: Buffer,
   filename: string
 ): Promise<StudentImportParseResult> {
-  let matrix: string[][] = [];
+  let matrix: SourceRow[] = [];
 
   if (filename.toLowerCase().endsWith(".xlsx")) {
     const wb = new ExcelJS.Workbook();
@@ -442,7 +450,7 @@ export async function parseStudentImportFile(
         cells[colNumber - 1] = cellToString(cell.value);
       });
       if (cells.some((c) => c.length > 0)) {
-        matrix.push(cells);
+        matrix.push({ cells, rowNumber: row.number });
       }
     });
   } else {
@@ -461,7 +469,7 @@ export async function parseStudentImportFile(
     };
   }
 
-  const headers = matrix[0].map(normalizeHeader);
+  const headers = matrix[0].cells.map(normalizeHeader);
   const idx = {
     studentId: headers.findIndex((h) =>
       ["studentid", "id", "studentnumber", "idnumber"].includes(h)
@@ -479,9 +487,6 @@ export async function parseStudentImportFile(
     email: headers.findIndex((h) =>
       ["email", "apcemail", "studentemail", "microsoftemail"].includes(h)
     ),
-    password: headers.findIndex((h) =>
-      ["password", "defaultpassword"].includes(h)
-    ),
   };
 
   if (idx.studentId === -1 || idx.lastName === -1 || idx.firstName === -1 || idx.email === -1) {
@@ -491,7 +496,7 @@ export async function parseStudentImportFile(
         {
           rowNumber: 1,
           message:
-            "Missing required columns. Expected headers: Student ID, Last Name, First Name, APC Email (optional: Middle Name, Course Code, Password).",
+            "Missing required columns. Expected headers: Student ID, Last Name, First Name, APC Email (optional: Middle Name, Course Code).",
         },
       ],
     };
@@ -501,8 +506,7 @@ export async function parseStudentImportFile(
   const errors: { rowNumber: number; message: string }[] = [];
 
   for (let r = 1; r < matrix.length; r++) {
-    const line = matrix[r];
-    const rowNumber = r + 1;
+    const { cells: line, rowNumber } = matrix[r];
     const studentId = (line[idx.studentId] ?? "").trim();
     const lastName = (line[idx.lastName] ?? "").trim();
     const firstName = (line[idx.firstName] ?? "").trim();
@@ -511,8 +515,6 @@ export async function parseStudentImportFile(
     const courseCode =
       idx.courseCode >= 0 ? (line[idx.courseCode] ?? "").trim() || null : null;
     const email = (line[idx.email] ?? "").trim().toLowerCase();
-    const password =
-      idx.password >= 0 ? (line[idx.password] ?? "").trim() || undefined : undefined;
 
     if (!studentId || !lastName || !firstName || !email) {
       errors.push({
@@ -528,13 +530,13 @@ export async function parseStudentImportFile(
     }
 
     rows.push({
+      rowNumber,
       studentId,
       lastName,
       firstName,
       middleName,
       courseCode,
       email,
-      password,
     });
   }
 
@@ -543,8 +545,8 @@ export async function parseStudentImportFile(
 
 export function generateStudentImportCsvTemplate(): string {
   return [
-    "Student ID,Last Name,First Name,Middle Name,Course Code,APC Email,Default Password",
-    "2024-140101,Alobin,Vince Nelmar,Pega,BSIT,vpalobin@student.apc.edu.ph,Student@2026",
-    "2024-140320,Albania,Roman Rico,Bundalian,BSIT,rbalbania2@student.apc.edu.ph,Student@2026",
+    "Student ID,Last Name,First Name,Middle Name,Course Code,APC Email",
+    "2099-000001,Dela Cruz,Juan Miguel,Reyes,BSIT,jdelacruz@student.apc.edu.ph",
+    "2099-000002,Santos,Maria Teresa,Lim,BSIT,mtsantos@student.apc.edu.ph",
   ].join("\r\n");
 }
