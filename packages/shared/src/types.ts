@@ -91,6 +91,19 @@ export interface LeaderboardEntry {
   speedLabel: string;
 }
 
+/** Leaderboard row as exposed to students (GET /api/questcard). */
+export type StudentLeaderboardEntry = Pick<
+  LeaderboardEntry,
+  | "rank"
+  | "studentId"
+  | "fullName"
+  | "courseCode"
+  | "stampedCount"
+  | "totalQuests"
+  | "completionPct"
+  | "speedLabel"
+>;
+
 export interface DigestQuestGroup {
   questId: string;
   taskNumber: number;

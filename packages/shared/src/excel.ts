@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { formatManilaDate, formatManilaDateTime } from "./deadline";
 import type {
   StudentImportParseResult,
   StudentImportRow,
@@ -208,8 +209,8 @@ export async function generateTrackerWorkbook(params: {
       q.taskNumber,
       q.title,
       q.category,
-      q.startDate ? new Date(q.startDate).toLocaleDateString("en-PH") : "",
-      q.deadline ? new Date(q.deadline).toLocaleDateString("en-PH") : "",
+      formatManilaDate(q.startDate),
+      formatManilaDate(q.deadline),
       q.openlearningUrl ?? "",
     ]);
   }
@@ -240,11 +241,8 @@ export async function generateTrackerWorkbook(params: {
   const studentById = new Map(params.students.map((s) => [s.id, s]));
   const questById = new Map(params.quests.map((q) => [q.id, q]));
 
-  const fmtTs = (v: Date | string | null | undefined) => {
-    if (!v) return "";
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-PH");
-  };
+  // Asia/Manila regardless of the server's timezone (Vercel runs in UTC).
+  const fmtTs = (v: Date | string | null | undefined) => formatManilaDateTime(v);
 
   const trackedSubs = params.submissions
     .filter(

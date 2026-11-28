@@ -1,7 +1,7 @@
 /** Data shapes for the student dashboard (mirrors GET /api/questcard). */
 import type {
   FinalsTrackValue,
-  LeaderboardEntry,
+  StudentLeaderboardEntry,
   QuestCategoryValue,
   SessionPayload,
   SubmissionStatusValue,
@@ -52,7 +52,7 @@ export interface QuestCardApiResponse {
   submissions: StudentSubmission[];
   leaderboard: {
     visible: boolean;
-    entries: LeaderboardEntry[];
+    entries: StudentLeaderboardEntry[];
   };
 }
 

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@rizlife/shared/db";
-import { computeLeaderboard } from "@rizlife/shared/leaderboard";
-import type { SubmissionStatusValue } from "@rizlife/shared/types";
+import {
+  computeLeaderboard,
+  toStudentLeaderboardEntry,
+} from "@rizlife/shared/leaderboard";
+import type {
+  StudentLeaderboardEntry,
+  SubmissionStatusValue,
+} from "@rizlife/shared/types";
 import { getStudentSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +74,7 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  let leaderboardEntries: ReturnType<typeof computeLeaderboard> = [];
+  let leaderboardEntries: StudentLeaderboardEntry[] = [];
   if (activeSection.leaderboardVisible) {
     const [sectionEnrollments, allSubs] = await Promise.all([
       prisma.enrollment.findMany({
@@ -99,6 +105,7 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // Classmates' student numbers, middle names and internal ranking data stay server-side.
     leaderboardEntries = computeLeaderboard(
       sectionEnrollments.map((e) => e.student),
       allSubs.map((s) => ({
@@ -106,7 +113,7 @@ export async function GET(req: NextRequest) {
         status: s.status as SubmissionStatusValue,
       })),
       quests.length
-    );
+    ).map(toStudentLeaderboardEntry);
   }
 
   return NextResponse.json({

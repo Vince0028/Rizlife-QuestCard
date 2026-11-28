@@ -48,7 +48,9 @@
 | **L8** Client fetch handling | ✅ Done | One `apiFetch` helper (never throws, safe JSON, always an `error` message) replaces 38 raw `fetch` calls in the teacher, admin and student UIs. |
 | **L11** Dead code / counts | ✅ Done | The unused URL normalisation was removed; `updateEnrollmentTrack` returns the real updated count. |
 
-Still open from §3: **H1–H4**, **M1** (cron endpoint is open when `CRON_SECRET` is unset), **M3**, **M4**, **M5**, **L1**, **L10**.
+**M3** (student leaderboard payload) and **M4** (Asia/Manila timestamps on UTC hosts) were fixed on 2026-11-28 and are covered by `__tests__/timezone-privacy.ts`.
+
+Still open from §3: **H1–H4**, **M1** (cron endpoint is open when `CRON_SECRET` is unset), **M5**, **L1**, **L10**.
 
 ---
 
