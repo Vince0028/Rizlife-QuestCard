@@ -3,6 +3,15 @@ import { LoginCard } from "@rizlife/shared/ui";
 
 export const dynamic = "force-dynamic";
 
+// Fictional account from the local JSON dev database. Shown and pre-filled only in local
+// development: never on a deployed portal, and never with Supabase/Postgres configured.
+const DEMO_EMAIL = "admin@apc.edu.ph";
+const DEMO_PASSWORD = "Admin@RizLife2026";
+const showDemoAccount =
+  process.env.NODE_ENV !== "production" &&
+  !process.env.DATABASE_URL?.trim() &&
+  !process.env.SUPABASE_URL?.trim();
+
 export default async function AdminLoginPage({
   searchParams,
 }: {
@@ -35,8 +44,8 @@ export default async function AdminLoginPage({
       portal="admin"
       portalTitle="Admin Console"
       portalSubtitle="Provision teacher & student accounts, configure global email digests, and override any RizLife section."
-      defaultDemoEmail="admin@apc.edu.ph"
-      defaultDemoPassword="Admin@RizLife2026"
+      defaultDemoEmail={showDemoAccount ? DEMO_EMAIL : undefined}
+      defaultDemoPassword={showDemoAccount ? DEMO_PASSWORD : undefined}
       microsoftSsoConfigured={await isMicrosoftSsoEnabled()}
       initialError={
         params.error

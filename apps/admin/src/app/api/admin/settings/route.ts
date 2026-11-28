@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { prisma } from "@rizlife/shared/db";
 import { saveSystemSettings } from "@rizlife/shared/admin-service";
 import { toWorkspaceError } from "@rizlife/shared/workspace-service";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
   const settings = await prisma.systemSetting.upsert({
     where: { id: "global" },
     update: {},
@@ -20,6 +23,8 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
   try {
     const settings = await saveSystemSettings(await req.json().catch(() => ({})));

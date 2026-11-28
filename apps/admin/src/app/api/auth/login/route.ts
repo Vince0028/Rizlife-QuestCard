@@ -4,7 +4,11 @@ import { performPortalLogin } from "@rizlife/shared/portal-auth";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  const result = await performPortalLogin(body, "admin");
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    null;
+  const result = await performPortalLogin(body, "admin", { ip });
   const res = NextResponse.json(result.body, { status: result.status });
 
   if (result.tokenToSet) {

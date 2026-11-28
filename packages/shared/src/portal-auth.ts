@@ -14,6 +14,7 @@ import {
   isMicrosoftSsoConfigured,
 } from "./microsoft-sso";
 import { changePasswordSchema, loginSchema } from "./validation";
+import { hitRateLimit } from "./rate-limit";
 import type { PortalKey, RoleValue, SessionPayload } from "./types";
 import { NextResponse } from "next/server";
 import { getClearCookieOptions } from "./auth";
@@ -69,9 +70,29 @@ export interface AuthActionResult {
   clearCookie?: boolean;
 }
 
+/** Sign-in throttles: per client IP and per email, per server instance (rate-limit.ts). */
+const LOGIN_LIMIT_PER_IP = 30;
+const LOGIN_LIMIT_PER_EMAIL = 10;
+const LOGIN_WINDOW_MS = 10 * 60_000;
+/** Per-account lockout, stored in the database so it holds across instances. */
+export const MAX_FAILED_LOGINS = 5;
+export const LOCKOUT_MS = 15 * 60_000;
+
+const GENERIC_LOGIN_ERROR = "Invalid email or password.";
+const TOO_MANY_ATTEMPTS =
+  "Too many sign-in attempts. Please wait a few minutes and try again.";
+// bcrypt of a random string: lets unknown accounts take as long as real ones.
+const DUMMY_PASSWORD_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.d3hGlbF6m5lG0tM5hxw7Ga3yQ5yW";
+
+/**
+ * Password sign-in. Account existence, activation and role are only revealed after
+ * the password is verified: every failure before that is the same generic 401 and
+ * takes the same bcrypt time.
+ */
 export async function performPortalLogin(
   rawBody: unknown,
-  portal: PortalKey
+  portal: PortalKey,
+  context: { ip?: string | null } = {}
 ): Promise<AuthActionResult> {
   const parsed = loginSchema.safeParse(rawBody);
   if (!parsed.success) {
@@ -83,6 +104,13 @@ export async function performPortalLogin(
 
   const { email, password } = parsed.data;
 
+  // Throttle before touching the database (applies to unknown emails too).
+  const ipOk = hitRateLimit(`login:ip:${context.ip || "unknown"}`, LOGIN_LIMIT_PER_IP, LOGIN_WINDOW_MS);
+  const emailOk = hitRateLimit(`login:email:${email}`, LOGIN_LIMIT_PER_EMAIL, LOGIN_WINDOW_MS);
+  if (!ipOk || !emailOk) {
+    return { status: 429, body: { error: TOO_MANY_ATTEMPTS } };
+  }
+
   let user: Awaited<ReturnType<typeof prisma.user.findUnique>>;
   try {
     user = await prisma.user.findUnique({ where: { email } });
@@ -90,22 +118,46 @@ export async function performPortalLogin(
     console.error("[RizLife Login Error]:", err);
     return {
       status: 500,
-      body: {
-        error:
-          "Database error while signing in. Check your terminal logs for details.",
-      },
+      body: { error: "Sign-in is temporarily unavailable. Please try again shortly." },
     };
   }
 
-  if (!user || !user.isActive) {
-    return {
-      status: 401,
-      body: { error: "Invalid APC email or password, or account is inactive." },
-    };
+  const now = Date.now();
+  if (user?.lockedUntil && user.lockedUntil.getTime() > now) {
+    return { status: 429, body: { error: TOO_MANY_ATTEMPTS } };
   }
 
+  const usable = Boolean(user && user.isActive && user.passwordHash);
+  const passwordOk = await verifyPassword(
+    password,
+    usable ? user!.passwordHash : DUMMY_PASSWORD_HASH
+  );
+
+  if (!usable || !passwordOk) {
+    if (user && !passwordOk) {
+      const failures = (user.failedLoginCount ?? 0) + 1;
+      const lock = failures >= MAX_FAILED_LOGINS;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: lock
+          ? { failedLoginCount: 0, lockedUntil: new Date(now + LOCKOUT_MS) }
+          : { failedLoginCount: failures },
+      });
+    }
+    return { status: 401, body: { error: GENERIC_LOGIN_ERROR } };
+  }
+  const account = user!;
+
+  if ((account.failedLoginCount ?? 0) > 0 || account.lockedUntil) {
+    await prisma.user.update({
+      where: { id: account.id },
+      data: { failedLoginCount: 0, lockedUntil: null },
+    });
+  }
+
+  // From here the caller proved they know the password, so specific messages are fine.
   const allowedRoles = PORTAL_ALLOWED_ROLES[portal];
-  if (!allowedRoles.includes(user.role as RoleValue)) {
+  if (!allowedRoles.includes(account.role as RoleValue)) {
     return {
       status: 403,
       body: {
@@ -116,26 +168,32 @@ export async function performPortalLogin(
     };
   }
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) {
+  if (
+    account.mustChangePassword &&
+    account.tempPasswordExpiresAt &&
+    account.tempPasswordExpiresAt.getTime() < now
+  ) {
     return {
       status: 401,
-      body: { error: "Invalid APC email or password." },
+      body: {
+        error:
+          "Your temporary password has expired. Ask your teacher or the RizLife administrator for a new one.",
+      },
     };
   }
 
   const payload: SessionPayload = {
-    userId: user.id,
-    email: user.email,
-    role: user.role as RoleValue,
-    firstName: user.firstName,
-    middleName: user.middleName ?? null,
-    lastName: user.lastName,
-    studentId: user.studentId,
-    courseCode: user.courseCode,
-    mustChangePassword: user.mustChangePassword,
+    userId: account.id,
+    email: account.email,
+    role: account.role as RoleValue,
+    firstName: account.firstName,
+    middleName: account.middleName ?? null,
+    lastName: account.lastName,
+    studentId: account.studentId,
+    courseCode: account.courseCode,
+    mustChangePassword: account.mustChangePassword,
     portal,
-    sessionVersion: user.sessionVersion ?? 0,
+    sessionVersion: account.sessionVersion ?? 0,
     authMethod: "password",
   };
 
@@ -146,16 +204,29 @@ export async function performPortalLogin(
     tokenToSet: token,
     body: {
       ok: true,
-      mustChangePassword: user.mustChangePassword,
+      mustChangePassword: account.mustChangePassword,
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        id: account.id,
+        email: account.email,
+        role: account.role,
+        firstName: account.firstName,
+        lastName: account.lastName,
       },
     },
   };
+}
+
+/** 403 body for API calls made before a forced password change is completed. */
+export const PASSWORD_CHANGE_REQUIRED = {
+  error: "Change your temporary password before continuing.",
+  mustChangePassword: true,
+} as const;
+
+/** For API routes: a Response to return when the session still has to change its password. */
+export function requirePasswordChanged(session: SessionPayload): Response | null {
+  return session.mustChangePassword
+    ? Response.json(PASSWORD_CHANGE_REQUIRED, { status: 403 })
+    : null;
 }
 
 export async function performChangePassword(
@@ -204,6 +275,9 @@ export async function performChangePassword(
     data: {
       passwordHash: newHash,
       mustChangePassword: false,
+      tempPasswordExpiresAt: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
       sessionVersion: (user.sessionVersion ?? 0) + 1,
     },
   });
@@ -420,10 +494,22 @@ export async function performMicrosoftCallback(params: {
       return fail("unauthorized");
     }
 
-    if (!user.microsoftOid) {
+    // Link the Microsoft identity, and retire a temporary password nobody has used to
+    // sign in yet: the account now signs in through Entra ID, and an unused temporary
+    // password lying around is just a takeover risk. (A teacher/admin can issue a new
+    // one if this user ever needs password sign-in.)
+    const retireTempPassword = user.mustChangePassword;
+    if (!user.microsoftOid || retireTempPassword) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { microsoftOid: profile.oid },
+        data: {
+          ...(!user.microsoftOid && { microsoftOid: profile.oid }),
+          ...(retireTempPassword && {
+            passwordHash: null,
+            mustChangePassword: false,
+            tempPasswordExpiresAt: null,
+          }),
+        },
       });
     }
 

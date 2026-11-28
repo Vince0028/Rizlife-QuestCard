@@ -83,11 +83,17 @@ export function createPortalMiddleware(
       return res;
     }
 
-    if (
-      session.mustChangePassword &&
-      pathname !== "/change-password" &&
-      !pathname.startsWith("/api/")
-    ) {
+    if (session.mustChangePassword && pathname !== "/change-password") {
+      // /api/auth/* (change-password, logout) returned above as public.
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          {
+            error: "Change your temporary password before continuing.",
+            mustChangePassword: true,
+          },
+          { status: 403 }
+        );
+      }
       return NextResponse.redirect(new URL("/change-password", req.url));
     }
 

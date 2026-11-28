@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { z } from "zod";
 import {
   chooseStudentFinalsTrack,
@@ -18,6 +19,8 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
   const parsed = studentTrackChoiceSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {

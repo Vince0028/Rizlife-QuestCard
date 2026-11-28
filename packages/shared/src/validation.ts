@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, isKnownDefaultPassword } from "./password-policy";
 
 export interface UrlValidationResult {
   valid: boolean;
@@ -86,8 +87,11 @@ export const changePasswordSchema = z
     currentPassword: z.string().optional().default(""),
     newPassword: z
       .string()
-      .min(8, "New password must be at least 8 characters long.")
-      .max(128),
+      .min(MIN_PASSWORD_LENGTH, `New password must be at least ${MIN_PASSWORD_LENGTH} characters long.`)
+      .max(MAX_PASSWORD_LENGTH)
+      .refine((p) => !isKnownDefaultPassword(p), {
+        message: "That password is publicly known. Choose a different one.",
+      }),
     confirmPassword: z.string(),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -129,7 +133,6 @@ export const createStudentSchema = z.object({
   lastName: z.string().trim().min(1, "Last name is required.").max(80),
   courseCode: z.string().trim().max(30).optional().nullable(),
   email: z.string().trim().email("Valid APC student email required.").toLowerCase(),
-  defaultPassword: z.string().min(6).max(128).optional(),
 });
 
 export const updateStudentSchema = z.object({
@@ -178,8 +181,6 @@ export const createUserAdminSchema = z.object({
   lastName: z.string().trim().min(1).max(80),
   courseCode: z.string().trim().max(30).optional().nullable(),
   email: z.string().trim().email().toLowerCase(),
-  password: z.string().min(6).max(128).optional(),
-  mustChangePassword: z.boolean().optional(),
   assignSectionIds: z.array(z.string().max(64)).max(100).optional(),
 });
 

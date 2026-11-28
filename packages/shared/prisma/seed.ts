@@ -2,6 +2,29 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/password";
 
+/**
+ * This demo seed sets KNOWN passwords (they're in the README). Refuse to run it anywhere
+ * but a local development database unless explicitly forced.
+ */
+function assertDemoSeedAllowed() {
+  if (process.argv.includes("--force-demo")) return;
+  let host = "";
+  try {
+    host = new URL(process.env.DATABASE_URL ?? "").hostname;
+  } catch {
+    // unparsable/missing URL: Prisma will report it
+  }
+  const local = ["localhost", "127.0.0.1", "::1", "postgres", "db"].includes(host);
+  if (process.env.NODE_ENV === "production" || (host && !local)) {
+    console.error(
+      `Refusing to run the demo seed against ${host || "this database"}: it creates accounts with publicly known passwords.\n` +
+        "It is meant for a local Docker database. Pass --force-demo only for a throwaway database."
+    );
+    process.exit(1);
+  }
+}
+
+assertDemoSeedAllowed();
 const prisma = new PrismaClient();
 
 async function main() {

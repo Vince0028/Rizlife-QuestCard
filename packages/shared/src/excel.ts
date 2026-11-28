@@ -487,9 +487,6 @@ export async function parseStudentImportFile(
     email: headers.findIndex((h) =>
       ["email", "apcemail", "studentemail", "microsoftemail"].includes(h)
     ),
-    password: headers.findIndex((h) =>
-      ["password", "defaultpassword"].includes(h)
-    ),
   };
 
   if (idx.studentId === -1 || idx.lastName === -1 || idx.firstName === -1 || idx.email === -1) {
@@ -499,7 +496,7 @@ export async function parseStudentImportFile(
         {
           rowNumber: 1,
           message:
-            "Missing required columns. Expected headers: Student ID, Last Name, First Name, APC Email (optional: Middle Name, Course Code, Password).",
+            "Missing required columns. Expected headers: Student ID, Last Name, First Name, APC Email (optional: Middle Name, Course Code).",
         },
       ],
     };
@@ -518,8 +515,6 @@ export async function parseStudentImportFile(
     const courseCode =
       idx.courseCode >= 0 ? (line[idx.courseCode] ?? "").trim() || null : null;
     const email = (line[idx.email] ?? "").trim().toLowerCase();
-    const password =
-      idx.password >= 0 ? (line[idx.password] ?? "").trim() || undefined : undefined;
 
     if (!studentId || !lastName || !firstName || !email) {
       errors.push({
@@ -542,7 +537,6 @@ export async function parseStudentImportFile(
       middleName,
       courseCode,
       email,
-      password,
     });
   }
 
@@ -551,8 +545,8 @@ export async function parseStudentImportFile(
 
 export function generateStudentImportCsvTemplate(): string {
   return [
-    "Student ID,Last Name,First Name,Middle Name,Course Code,APC Email,Default Password",
-    "2099-000001,Dela Cruz,Juan Miguel,Reyes,BSIT,jdelacruz@student.apc.edu.ph,Student@2026",
-    "2099-000002,Santos,Maria Teresa,Lim,BSIT,mtsantos@student.apc.edu.ph,Student@2026",
+    "Student ID,Last Name,First Name,Middle Name,Course Code,APC Email",
+    "2099-000001,Dela Cruz,Juan Miguel,Reyes,BSIT,jdelacruz@student.apc.edu.ph",
+    "2099-000002,Santos,Maria Teresa,Lim,BSIT,mtsantos@student.apc.edu.ph",
   ].join("\r\n");
 }

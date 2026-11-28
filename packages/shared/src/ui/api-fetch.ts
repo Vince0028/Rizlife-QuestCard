@@ -56,5 +56,9 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<ApiRe
   if (res.status === 401 && typeof window !== "undefined") {
     window.location.assign("/api/auth/session-ended");
   }
+  // A temporary password must be changed before the API can be used.
+  if (res.status === 403 && data.mustChangePassword === true && typeof window !== "undefined") {
+    window.location.assign("/change-password");
+  }
   return { ok: res.ok, status: res.status, data };
 }

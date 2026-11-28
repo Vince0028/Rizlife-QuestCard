@@ -97,7 +97,7 @@ export async function runSessionRevocationChecks() {
   {
     const u = await mkUser("sr_student_reset", "STUDENT");
     const stolen = await login(u.email, "student");
-    await resetManagedUserPassword({ targetUserId: u.id, newPassword: "Temp@2099x", actor: asAdmin });
+    const { temporaryPassword } = await resetManagedUserPassword({ targetUserId: u.id, actor: asAdmin });
     assert.equal(await valid(stolen, "student"), false, "reset ends existing sessions");
     const hijack = await performChangePassword(stolen, "student", {
       newPassword: "Attacker@2099", confirmPassword: "Attacker@2099",
@@ -105,8 +105,8 @@ export async function runSessionRevocationChecks() {
     assert.equal(hijack.status, 401, "a pre-reset session can't change the password");
 
     // The student signs in with the temporary password and changes it.
-    const tempSession = await login(u.email, "student", "Temp@2099x");
-    const otherDevice = await login(u.email, "student", "Temp@2099x");
+    const tempSession = await login(u.email, "student", temporaryPassword);
+    const otherDevice = await login(u.email, "student", temporaryPassword);
     const changed = await performChangePassword(tempSession, "student", {
       newPassword: "Mine@20990", confirmPassword: "Mine@20990",
     });

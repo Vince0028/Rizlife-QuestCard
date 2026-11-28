@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { prisma } from "@rizlife/shared/db";
 import { isMicrosoftSsoConfigured } from "@rizlife/shared/microsoft-sso";
 import { getAdminSession } from "@/lib/session";
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
   const [
     users,

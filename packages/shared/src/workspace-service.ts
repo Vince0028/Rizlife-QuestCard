@@ -5,7 +5,7 @@ import {
   maybeTriggerThresholdDigest,
   sendSectionDigest,
 } from "./digest";
-import { generateDefaultPassword, hashPassword } from "./password";
+import { TEMP_PASSWORD_TTL_MS, generateTemporaryPassword, hashPassword } from "./password";
 import {
   generateTrackerCsv,
   generateTrackerWorkbook,
@@ -63,6 +63,30 @@ export function toWorkspaceError(err: unknown): { status: number; message: strin
 /** Thrown for request problems the user can fix (default 400). */
 export function clientError(message: string, status = 400) {
   return Object.assign(new Error(message), { status });
+}
+
+/**
+ * Gives an account a fresh random temporary password: forced change at next sign-in,
+ * expires after TEMP_PASSWORD_TTL_MS, and ends every existing session. Returns the
+ * plain password exactly once (it's only stored hashed).
+ */
+export async function issueTemporaryPassword(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw clientError("User not found.", 404);
+  const temporaryPassword = generateTemporaryPassword();
+  const expiresAt = new Date(Date.now() + TEMP_PASSWORD_TTL_MS);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: await hashPassword(temporaryPassword),
+      mustChangePassword: true,
+      tempPasswordExpiresAt: expiresAt,
+      sessionVersion: (user.sessionVersion ?? 0) + 1,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    },
+  });
+  return { temporaryPassword, expiresAt: expiresAt.toISOString() };
 }
 
 /** The global allowed student email domain (Admin settings), e.g. "student.apc.edu.ph". */
@@ -808,7 +832,6 @@ export async function createOrEnrollStudent(
     lastName,
     courseCode,
     email,
-    defaultPassword,
   } = parsed.data;
 
   await assertSectionAccess(sectionId, user);
@@ -846,11 +869,9 @@ export async function createOrEnrollStudent(
 
   let studentUser = existingByEmail;
   let created = false;
-  const assignedPassword =
-    defaultPassword || generateDefaultPassword(studentId);
+  let credential: { temporaryPassword: string; expiresAt: string } | null = null;
 
   if (!studentUser) {
-    const hash = await hashPassword(assignedPassword);
     studentUser = await prisma.user.create({
       data: {
         studentId,
@@ -859,13 +880,14 @@ export async function createOrEnrollStudent(
         lastName,
         courseCode: courseCode || null,
         email,
-        passwordHash: hash,
+        passwordHash: null, // set just below by issueTemporaryPassword
         role: "STUDENT",
         mustChangePassword: true,
         isActive: true,
       },
     });
     created = true;
+    credential = await issueTemporaryPassword(studentUser.id);
   } else if (studentUser.role !== "STUDENT") {
     throw Object.assign(
       new Error(`Account ${studentUser.email} already exists as ${studentUser.role}.`),
@@ -886,7 +908,9 @@ export async function createOrEnrollStudent(
 
   return {
     created,
-    defaultPassword: created ? assignedPassword : null,
+    /** One-time random password for a newly created account (null when linking). */
+    temporaryPassword: credential?.temporaryPassword ?? null,
+    temporaryPasswordExpiresAt: credential?.expiresAt ?? null,
     student: {
       id: studentUser.id,
       studentId: studentUser.studentId,
@@ -902,7 +926,6 @@ export async function bulkImportStudentsForSection(params: {
   sectionId: string;
   fileBuffer: Buffer;
   filename: string;
-  fallbackPassword?: string;
   user: SessionPayload;
 }) {
   await assertSectionAccess(params.sectionId, params.user);
@@ -913,6 +936,15 @@ export async function bulkImportStudentsForSection(params: {
   // Rows the parser already rejected (missing fields, bad email) count as skipped too.
   let skippedCount = parsed.errors.length;
   const rowErrors = [...parsed.errors];
+  /** Temporary passwords for accounts this import created (shown once to the teacher). */
+  const credentials: {
+    rowNumber: number;
+    email: string;
+    lastName: string;
+    firstName: string;
+    temporaryPassword: string;
+    expiresAt: string;
+  }[] = [];
 
   for (const row of parsed.rows) {
     try {
@@ -925,13 +957,22 @@ export async function bulkImportStudentsForSection(params: {
           lastName: row.lastName,
           courseCode: row.courseCode,
           email: row.email,
-          defaultPassword:
-            row.password || params.fallbackPassword || undefined,
         },
         params.user
       );
-      if (res.created) createdCount += 1;
-      else enrolledExistingCount += 1;
+      if (res.created && res.temporaryPassword) {
+        createdCount += 1;
+        credentials.push({
+          rowNumber: row.rowNumber,
+          email: res.student.email,
+          lastName: res.student.lastName,
+          firstName: res.student.firstName,
+          temporaryPassword: res.temporaryPassword,
+          expiresAt: res.temporaryPasswordExpiresAt!,
+        });
+      } else {
+        enrolledExistingCount += 1;
+      }
     } catch (err) {
       skippedCount += 1;
       rowErrors.push({
@@ -947,22 +988,16 @@ export async function bulkImportStudentsForSection(params: {
     enrolledExistingCount,
     skippedCount,
     errors: rowErrors.sort((a, b) => a.rowNumber - b.rowNumber),
+    credentials,
   };
 }
 
+/** Teacher/admin "reset password": issues a random temporary password (shown once). */
 export async function resetManagedUserPassword(params: {
   targetUserId: string;
-  newPassword: string;
   actor: SessionPayload;
   sectionId?: string;
 }) {
-  if (params.newPassword.length < 6) {
-    throw Object.assign(
-      new Error("Temporary password must be at least 6 characters."),
-      { status: 400 }
-    );
-  }
-
   const target = await prisma.user.findUnique({
     where: { id: params.targetUserId },
   });
@@ -986,18 +1021,8 @@ export async function resetManagedUserPassword(params: {
     }
   }
 
-  const passwordHash = await hashPassword(params.newPassword);
-  await prisma.user.update({
-    where: { id: target.id },
-    data: {
-      passwordHash,
-      mustChangePassword: true,
-      // Ends every session that knew the old password.
-      sessionVersion: (target.sessionVersion ?? 0) + 1,
-    },
-  });
-
-  return { ok: true };
+  const issued = await issueTemporaryPassword(target.id);
+  return { ok: true, email: target.email, ...issued };
 }
 
 export async function removeStudentFromSection(params: {

@@ -21,6 +21,7 @@
     "db:push": "prisma db push --schema=packages/shared/prisma/schema.prisma",
     "db:seed": "tsx packages/shared/prisma/seed.ts",
     "db:studio": "prisma studio --schema=packages/shared/prisma/schema.prisma",
+    "accounts:temp-passwords": "tsx scripts/temp-passwords.ts",
     "verify": "tsx packages/shared/src/__tests__/verify.ts",
     "test:e2e": "playwright test"
   },

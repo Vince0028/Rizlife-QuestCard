@@ -52,7 +52,18 @@
 
 **H3** (sessions re-checked against the database, revoked via `User.sessionVersion`), **H4** (RLS on all 7 tables, public API roles revoked: `supabase/migration_security_hardening.sql`) and **M1** (the cron endpoint fails closed without `CRON_SECRET`) were fixed on 2026-11-28 and are covered by `__tests__/session-revocation.ts`. **H4 still has to be applied to the live Supabase project** (run the migration, turn off Auth sign-ups, refresh the Security Advisor).
 
-Still open from §3: **H1** (rotate the demo/admin passwords on the live database), **H2** (shared starter passwords, no login rate limiting), **M5**, **L1**, **L10**.
+**H1/H2/M5/L1/L10** were fixed in code on 2026-11-28 (`__tests__/auth-hardening.ts`):
+- **Temporary passwords:** always random, shown once, expire after 7 days. No passwords in SQL or docs, and the login pages only show demo credentials in local dev. SSO sign-in retires an unused temporary password.
+- **Login:** identical failures before the password is verified. Lockout after 5 failures (15 min), plus per-IP and per-email throttles.
+- **API gate:** `mustChangePassword` blocks `/api/*`.
+- **Password policy:** 8 characters minimum, and the published defaults are refused.
+
+**Still to do on the live project (H1):**
+1. Run `supabase/migration_auth_hardening.sql` before deploying.
+2. Then run `npm run accounts:temp-passwords -- --known-defaults` (dry run), then `--apply`.
+3. Distribute and delete the CSV.
+
+No code findings from §3 remain open.
 
 ---
 

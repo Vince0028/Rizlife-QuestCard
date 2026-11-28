@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { deleteUserAsAdmin, updateUserAsAdmin } from "@rizlife/shared/admin-service";
 import { toWorkspaceError } from "@rizlife/shared/workspace-service";
 import { getAdminSession } from "@/lib/session";
@@ -10,6 +11,8 @@ type Context = { params: Promise<{ userId: string }> };
 export async function PATCH(req: NextRequest, context: Context) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
   const { userId } = await context.params;
   try {
     const user = await updateUserAsAdmin({
@@ -27,6 +30,8 @@ export async function PATCH(req: NextRequest, context: Context) {
 export async function DELETE(_req: NextRequest, context: Context) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
   const { userId } = await context.params;
   try {
     return NextResponse.json(await deleteUserAsAdmin({ userId, actor: session }));

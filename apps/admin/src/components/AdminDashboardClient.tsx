@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import {
   apiFetch,
+  TemporaryPasswordDialog,
+  type IssuedCredential,
   ConfirmDialog,
   LamparillaWreathWatermark,
   ModalDrawer,
@@ -59,13 +61,12 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
   const [newEmail, setNewEmail] = useState("");
   const [newStudentId, setNewStudentId] = useState("");
   const [newCourse, setNewCourse] = useState("");
-  const [newPassword, setNewPassword] = useState("Teacher@RizLife2026");
   const [assignSectionIds, setAssignSectionIds] = useState<string[]>([]);
   const [createUserBusy, setCreateUserBusy] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
 
-  // Reset password modal
-  const [resetPwValue, setResetPwValue] = useState("RizLife@2026");
+  // Temporary passwords issued by create/reset, shown once
+  const [issuedCredentials, setIssuedCredentials] = useState<IssuedCredential[] | null>(null);
 
   // New section form
   const [secCode, setSecCode] = useState("");
@@ -193,8 +194,6 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           email: newEmail,
           studentId: newRole === "STUDENT" ? newStudentId || null : null,
           courseCode: newRole === "STUDENT" ? newCourse || null : null,
-          password: newPassword || undefined,
-          mustChangePassword: true,
           assignSectionIds: newRole === "TEACHER" ? assignSectionIds : undefined,
         }),
       });
@@ -203,10 +202,15 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
         showToast("err", json.error || "Failed to create account.");
         return;
       }
-      showToast(
-        "ok",
-        `Created ${json.user.role} account ${json.user.email} (temporary password: ${json.temporaryPassword}).`
-      );
+      setIssuedCredentials([
+        {
+          name: `${json.user.lastName}, ${json.user.firstName}`,
+          email: json.user.email,
+          temporaryPassword: json.temporaryPassword,
+          expiresAt: json.temporaryPasswordExpiresAt,
+        },
+      ]);
+      showToast("ok", `Created ${json.user.role} account ${json.user.email}.`);
       setNewFirst("");
       setNewMiddle("");
       setNewLast("");
@@ -230,7 +234,6 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     setEditUserRole(u.role);
     setEditUserStudentId(u.studentId || "");
     setEditUserCourse(u.courseCode || "");
-    setResetPwValue("RizLife@2026");
   }
 
   function requestSaveUserEdit(e: React.FormEvent) {
@@ -326,22 +329,27 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
     const target = editUserTarget;
     askConfirm({
       title: "Reset Account Password?",
-      description: `Set temporary password for ${target.lastName}, ${target.firstName}. They will be forced to choose a new password on next sign in.`,
-      highlightText: `${target.email}  →  ${resetPwValue}`,
+      description: `Give ${target.lastName}, ${target.firstName} a new random temporary password. Their current password and signed-in sessions stop working; they choose a new password at next sign-in.`,
+      highlightText: target.email,
       confirmLabel: "Yes, Reset Password",
       variant: "warning",
       onConfirm: async () => {
         const res = await apiFetch(`/api/admin/users/${target.id}/reset-password`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ newPassword: resetPwValue }),
         });
         const json = res.data;
         if (!res.ok) {
           showToast("err", json.error || "Password reset failed.");
           return;
         }
-        showToast("ok", `Temporary password reset for ${target.email}.`);
+        setIssuedCredentials([
+          {
+            name: `${target.lastName}, ${target.firstName}`,
+            email: target.email,
+            temporaryPassword: json.temporaryPassword,
+            expiresAt: json.expiresAt,
+          },
+        ]);
         setEditUserTarget(null);
         await loadOverview();
       },
@@ -1075,13 +1083,6 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
               onChange={(e) => {
                 const role = e.target.value as RoleValue;
                 setNewRole(role);
-                setNewPassword(
-                  role === "TEACHER"
-                    ? "Teacher@RizLife2026"
-                    : role === "ADMIN"
-                    ? "Admin@RizLife2026"
-                    : "Student@2026"
-                );
               }}
               className="folio-input w-full px-3 py-2 text-xs font-bold"
             >
@@ -1208,18 +1209,10 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
             </div>
           )}
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-              Temporary Default Password
-            </label>
-            <input
-              required
-              minLength={6}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="folio-input w-full px-3 py-2 font-mono text-xs"
-            />
-          </div>
+          <p className="text-[11px] text-[#5E5246]">
+            A random temporary password is generated and shown once after the account is
+            created. It expires after 7 days if unused.
+          </p>
 
           <button
             type="submit"
@@ -1383,24 +1376,16 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
 
             <div className="space-y-2.5 border-t border-[#C6B393] pt-4">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                Reset Temporary Password
+                Forgotten Password
               </label>
-              <div className="flex gap-2">
-                <input
-                  minLength={6}
-                  value={resetPwValue}
-                  onChange={(e) => setResetPwValue(e.target.value)}
-                  className="folio-input flex-1 px-3 py-2 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleResetUserPasswordFromEdit}
-                  className="btn-heritage-ink px-3 py-2 text-xs"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Reset PW
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleResetUserPasswordFromEdit}
+                className="btn-heritage-ink w-full px-3 py-2 text-xs"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Issue New Temporary Password
+              </button>
             </div>
 
             {editUserTarget.id !== user.userId && (
@@ -1508,6 +1493,11 @@ export function AdminDashboardClient({ user }: { user: SessionPayload }) {
           </form>
         )}
       </ModalDrawer>
+
+      <TemporaryPasswordDialog
+        credentials={issuedCredentials}
+        onClose={() => setIssuedCredentials(null)}
+      />
 
       <ConfirmDialog
         open={Boolean(confirmState)}

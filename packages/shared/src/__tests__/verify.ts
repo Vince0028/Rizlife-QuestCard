@@ -10,6 +10,7 @@ import { runRouteAuthChecks } from "./route-auth";
 import { runHardeningChecks } from "./hardening";
 import { runTimezoneAndPrivacyChecks } from "./timezone-privacy";
 import { runSessionRevocationChecks } from "./session-revocation";
+import { runAuthHardeningChecks } from "./auth-hardening";
 import { signSessionToken, verifySessionToken } from "../auth";
 import { hashPassword, verifyPassword } from "../password";
 import { createSectionSchema, validateSubmissionUrl } from "../validation";
@@ -270,7 +271,10 @@ async function run() {
   // 14. Session revocation (H3) + fail-closed cron authorization (M1)
   await runSessionRevocationChecks();
 
-  // 15. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
+  // 15. Login enumeration/lockout/throttle, temp passwords, policy, API gate, rotation
+  await runAuthHardeningChecks();
+
+  // 16. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
   //     Keep last: it points the adapter at a fake PostgREST for its duration.
   await runAdapterLazyColumnChecks();
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePasswordChanged } from "@rizlife/shared/portal-auth";
 import { prisma } from "@rizlife/shared/db";
 import {
   computeLeaderboard,
@@ -17,6 +18,8 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const passwordGate = requirePasswordChanged(session);
+  if (passwordGate) return passwordGate;
 
   const enrollments = await prisma.enrollment.findMany({
     where: { studentId: session.userId },

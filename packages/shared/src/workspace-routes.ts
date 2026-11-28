@@ -34,6 +34,7 @@ import {
   updateManagedSection,
   updateManagedStudent,
 } from "./workspace-service";
+import { requirePasswordChanged } from "./portal-auth";
 import type { SessionPayload } from "./types";
 
 export type SessionGetter = () => Promise<SessionPayload | null>;
@@ -61,6 +62,8 @@ export function createWorkspaceRoutes(getSession: SessionGetter) {
     return async (req, context) => {
       const session = await getSession();
       if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const gate = requirePasswordChanged(session);
+      if (gate) return gate;
       try {
         const params = (await (context ?? NO_PARAMS).params) as P;
         return await fn({ req, params, session });
@@ -199,26 +202,20 @@ export function createWorkspaceRoutes(getSession: SessionGetter) {
       ),
     },
 
-    // /api/workspace/students/[studentId]/reset-password
+    // /api/workspace/students/[studentId]/reset-password (random temp password, shown once)
     studentResetPassword: {
-      POST: guard<{ studentId: string }>(async ({ req, params, session }) => {
-        const body = (await readJson(req)) as { newPassword?: string };
-        return Response.json(
-          await resetManagedUserPassword({
-            targetUserId: params.studentId,
-            newPassword: body.newPassword || "",
-            actor: session,
-          })
-        );
-      }),
+      POST: guard<{ studentId: string }>(async ({ params, session }) =>
+        Response.json(
+          await resetManagedUserPassword({ targetUserId: params.studentId, actor: session })
+        )
+      ),
     },
 
-    // /api/workspace/students/import (multipart: sectionId, file, defaultPassword?)
+    // /api/workspace/students/import (multipart: sectionId, file)
     studentsImport: {
       POST: guard(async ({ req, session }) => {
         const form = await req.formData();
         const sectionId = String(form.get("sectionId") || "");
-        const defaultPassword = String(form.get("defaultPassword") || "").trim() || undefined;
         const file = form.get("file");
         if (!sectionId || !(file instanceof File)) {
           return Response.json(
@@ -231,7 +228,6 @@ export function createWorkspaceRoutes(getSession: SessionGetter) {
             sectionId,
             fileBuffer: Buffer.from(await file.arrayBuffer()),
             filename: file.name,
-            fallbackPassword: defaultPassword,
             user: session,
           })
         );

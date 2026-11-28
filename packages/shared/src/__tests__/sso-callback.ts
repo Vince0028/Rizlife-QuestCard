@@ -11,11 +11,13 @@ import { verifySessionToken } from "../auth";
 import { isMicrosoftSsoConfigured } from "../microsoft-sso";
 import {
   MICROSOFT_SSO_STATE_COOKIES,
+  performPortalLogin,
   getMicrosoftLoginRedirectUrl,
   isMicrosoftSsoEnabled,
   performMicrosoftCallback,
 } from "../portal-auth";
 import type { PortalKey } from "../types";
+import { issueTemporaryPassword } from "../workspace-service";
 
 const TENANT = "11111111-2222-3333-4444-555555555555";
 const ORIGINS: Record<PortalKey, string> = {
@@ -245,6 +247,26 @@ export async function runMicrosoftSsoChecks() {
       assert.equal(errorOf(cancelled.redirectPath), "sso_cancelled");
       const missing = await performMicrosoftCallback({ code: null, state: null, stateCookieValue: undefined, origin: ORIGINS[portal], portal });
       assert.equal(errorOf(missing.redirectPath), "sso_missing_code");
+    }
+
+    // H2: signing in with Microsoft retires an unused temporary password.
+    {
+      const pending = await prisma.user.create({
+        data: { firstName: "Temp", lastName: "Pending", email: "sso.pending@student.apc.edu.ph", role: "STUDENT", studentId: "2099-990077" },
+      });
+      const { temporaryPassword } = await issueTemporaryPassword(pending.id);
+      const { result } = await signIn("student", { oid: "oid-pending", mail: "sso.pending@student.apc.edu.ph" });
+      assert.equal(result.ok, true);
+      const after = await prisma.user.findUnique({ where: { id: pending.id } });
+      assert.equal(after!.passwordHash, null, "temporary password removed");
+      assert.equal(after!.mustChangePassword, false);
+      assert.equal(after!.tempPasswordExpiresAt, null);
+      const viaPassword = await performPortalLogin(
+        { email: "sso.pending@student.apc.edu.ph", password: temporaryPassword },
+        "student",
+        { ip: "10.98.0.1" }
+      );
+      assert.equal(viaPassword.status, 401, "the retired temporary password no longer signs in");
     }
 
     // Multi-tenant authorities are refused (email linking would allow account takeover).

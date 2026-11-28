@@ -33,3 +33,4 @@ export {
   type WorkspaceSummaryStats,
 } from "./TeacherWorkspace";
 export { apiFetch, type ApiData, type ApiResult } from "./api-fetch";
+export { TemporaryPasswordDialog, type IssuedCredential } from "./TemporaryPasswordDialog";

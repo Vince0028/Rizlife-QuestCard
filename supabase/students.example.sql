@@ -8,8 +8,10 @@
 --      `supabase/*_students.sql` pattern) and replace the rows.
 --   2. Run it in Supabase Dashboard -> SQL Editor after setup.sql.
 --
--- Starter password for every row: Student@2026 (students must change it on
--- first sign-in: mustChangePassword = true). Safe to re-run (idempotent).
+-- Accounts are created WITHOUT a password. Afterwards, issue each student a random,
+-- expiring temporary password (shown once, saved to a git-ignored CSV):
+--   npm run accounts:temp-passwords -- --no-password --apply
+-- or use "Issue New Temporary Password" in the Teacher Portal. Safe to re-run.
 -- ============================================================================
 
 WITH roster (id, student_id, last_name, first_name, middle_name, course_code, email) AS (
@@ -31,7 +33,7 @@ SELECT
   r.middle_name,
   r.course_code,
   r.email,
-  '$2b$10$N2qYNY8Prf2CFM4ZVkIK8OjpaDFbA.E6xLCCWystzp0L32dFcWp6i', -- Student@2026
+  NULL, -- password issued separately (see header)
   'STUDENT'::"Role",
   true,
   true,

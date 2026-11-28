@@ -32,7 +32,12 @@ export const STORE_FILE_PATH = process.env.RIZLIFE_LOCAL_DB_PATH?.trim()
 export const LOCK_FILE_PATH = `${STORE_FILE_PATH}.lock`;
 export const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
-/** Same starter rows as supabase/setup.sql (sections 5–8). */
+/**
+ * Starter rows for the local JSON database (same people as supabase/setup.sql sections
+ * 5–8). DEVELOPMENT/TEST ONLY: unlike setup.sql these have known demo passwords
+ * (Admin@RizLife2026 / Teacher@RizLife2026 / Student@2026) so local dev and the e2e tests
+ * can sign in. The adapter refuses to use local JSON in production.
+ */
 export function createInitialSeedData(): Store {
   const now = new Date();
   const build = (table: TableName, data: AnyRecord) => buildCreateRecord(table, data, now);

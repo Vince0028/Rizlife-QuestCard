@@ -154,7 +154,6 @@ export interface StudentImportRow {
   middleName: string | null;
   courseCode: string | null;
   email: string;
-  password?: string;
 }
 
 export interface StudentImportParseResult {

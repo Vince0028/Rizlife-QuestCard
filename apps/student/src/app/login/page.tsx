@@ -3,6 +3,15 @@ import { LoginCard } from "@rizlife/shared/ui";
 
 export const dynamic = "force-dynamic";
 
+// Fictional account from the local JSON dev database. Shown and pre-filled only in local
+// development: never on a deployed portal, and never with Supabase/Postgres configured.
+const DEMO_EMAIL = "jdelacruz@student.apc.edu.ph";
+const DEMO_PASSWORD = "Student@2026";
+const showDemoAccount =
+  process.env.NODE_ENV !== "production" &&
+  !process.env.DATABASE_URL?.trim() &&
+  !process.env.SUPABASE_URL?.trim();
+
 export default async function StudentLoginPage({
   searchParams,
 }: {
@@ -36,8 +45,8 @@ export default async function StudentLoginPage({
       portal="student"
       portalTitle="Student QuestCard"
       portalSubtitle="Sign in to view your Rizal tasks, submit OpenLearning links, and track your stamps."
-      defaultDemoEmail="jdelacruz@student.apc.edu.ph"
-      defaultDemoPassword="Student@2026"
+      defaultDemoEmail={showDemoAccount ? DEMO_EMAIL : undefined}
+      defaultDemoPassword={showDemoAccount ? DEMO_PASSWORD : undefined}
       microsoftSsoConfigured={await isMicrosoftSsoEnabled()}
       initialError={
         params.error

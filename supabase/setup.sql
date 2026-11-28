@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS "User" (
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "microsoftOid" TEXT,
     "sessionVersion" INTEGER NOT NULL DEFAULT 0,
+    "tempPasswordExpiresAt" TIMESTAMP(3),
+    "failedLoginCount" INTEGER NOT NULL DEFAULT 0,
+    "lockedUntil" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
@@ -140,6 +143,9 @@ CREATE TABLE IF NOT EXISTS "SystemSetting" (
 
 -- Columns added after a table was first created (re-runs on older databases)
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "sessionVersion" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tempPasswordExpiresAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "failedLoginCount" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lockedUntil" TIMESTAMP(3);
 
 -- 3. Indexes
 CREATE UNIQUE INDEX IF NOT EXISTS "User_studentId_key" ON "User"("studentId");
@@ -228,12 +234,12 @@ INSERT INTO "SystemSetting" (
 )
 ON CONFLICT ("id") DO NOTHING;
 
--- 6. Demo Admin, Teacher, and Student (fictional people; rotate these passwords
---    before real use, or create real accounts in the Admin Console instead).
--- Passwords:
---   Admin   (admin@apc.edu.ph)               -> Admin@RizLife2026
---   Teacher (teacher@apc.edu.ph)             -> Teacher@RizLife2026
---   Student (jdelacruz@student.apc.edu.ph)   -> Student@2026
+-- 6. Starter accounts: admin, a teacher, and a fictional demo student.
+--    They are created WITHOUT a usable password (no password is ever stored in this
+--    repository). Issue random, expiring temporary passwords with the script, run from
+--    the repo with this project's credentials in .env:
+--      npm run accounts:temp-passwords -- --emails admin@apc.edu.ph --apply
+--    (see README -> "First admin"). Re-running this script never touches passwords.
 INSERT INTO "User" (
   "id", "studentId", "firstName", "middleName", "lastName",
   "email", "passwordHash", "role", "courseCode",
@@ -246,10 +252,10 @@ INSERT INTO "User" (
   NULL,
   'Admin',
   'admin@apc.edu.ph',
-  '$2b$10$Cy7lPoCH/5hxqLN241wX7.0nAiIFq5aU0FqyIDxgMjmARFaNEOkQe',
+  NULL,
   'ADMIN',
   NULL,
-  false,
+  true,
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
@@ -261,10 +267,10 @@ INSERT INTO "User" (
   NULL,
   'de los Santos',
   'teacher@apc.edu.ph',
-  '$2b$10$k2ee53CavLcz6KlRu2kug.9Tvcq7lXcHjJNr0L05IZGBvNabEj9Lu',
+  NULL,
   'TEACHER',
   NULL,
-  false,
+  true,
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
@@ -276,10 +282,10 @@ INSERT INTO "User" (
   'Reyes',
   'Dela Cruz',
   'jdelacruz@student.apc.edu.ph',
-  '$2b$10$N2qYNY8Prf2CFM4ZVkIK8OjpaDFbA.E6xLCCWystzp0L32dFcWp6i',
+  NULL,
   'STUDENT',
   'BSIT',
-  false,
+  true,
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP

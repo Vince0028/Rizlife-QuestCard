@@ -6,8 +6,12 @@
 import { prisma } from "./db";
 import { DIGEST_CRON_SCHEDULE_UTC } from "./types";
 import type { SessionPayload } from "./types";
-import { systemSettingsSchema, updateUserAdminSchema } from "./validation";
-import { clientError } from "./workspace-service";
+import {
+  createUserAdminSchema,
+  systemSettingsSchema,
+  updateUserAdminSchema,
+} from "./validation";
+import { clientError, issueTemporaryPassword } from "./workspace-service";
 
 async function countOtherActiveAdmins(excludeUserId: string) {
   return prisma.user.count({
@@ -146,4 +150,53 @@ export async function saveSystemSettings(rawBody: unknown) {
     update: data,
     create: { id: "global", ...data },
   });
+}
+
+/**
+ * Admin "create account": every new account gets a random temporary password (shown
+ * once, forced change at first sign-in, expires in 7 days). Admins can't pick one.
+ */
+export async function createUserAsAdmin(rawBody: unknown) {
+  const parsed = createUserAdminSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw clientError(parsed.error.issues[0]?.message || "Invalid user payload.");
+  }
+  const data = parsed.data;
+
+  if (await prisma.user.findUnique({ where: { email: data.email } })) {
+    throw clientError(`An account with ${data.email} already exists.`, 409);
+  }
+  if (data.studentId && (await prisma.user.findUnique({ where: { studentId: data.studentId } }))) {
+    throw clientError(`Student ID ${data.studentId} is already assigned.`, 409);
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      role: data.role,
+      studentId: data.studentId || null,
+      firstName: data.firstName,
+      middleName: data.middleName || null,
+      lastName: data.lastName,
+      courseCode: data.courseCode || null,
+      email: data.email,
+      passwordHash: null,
+      mustChangePassword: true,
+      isActive: true,
+    },
+    select: { id: true, email: true, role: true, firstName: true, lastName: true, studentId: true },
+  });
+  const issued = await issueTemporaryPassword(user.id);
+
+  if (data.role === "TEACHER" && data.assignSectionIds && data.assignSectionIds.length > 0) {
+    await prisma.section.updateMany({
+      where: { id: { in: data.assignSectionIds } },
+      data: { teacherId: user.id },
+    });
+  }
+
+  return {
+    user,
+    temporaryPassword: issued.temporaryPassword,
+    temporaryPasswordExpiresAt: issued.expiresAt,
+  };
 }

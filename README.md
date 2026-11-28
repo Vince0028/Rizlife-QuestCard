@@ -48,9 +48,10 @@ Copy `.env.example` to `.env` at the repository root. All three apps read this o
 ### 3. Create the Schema & Seed Data
 
 **Supabase (SQL Editor):** run these in order in **Supabase Dashboard → SQL Editor**:
-1. `supabase/setup.sql`: tables, global settings, the demo admin, teacher and student, section `BSIT241`, and API grants.
+1. `supabase/setup.sql`: tables, global settings, the starter admin, teacher and demo student (no passwords; see [First admin](#first-admin-fresh-supabasepostgres)), section `BSIT241`, and API grants.
 2. **Existing databases only** (fresh `setup.sql` runs already include these):
    - `supabase/migration_finals_track.sql`: adds `Enrollment.finalsTrack`/`assignedModule*`, for databases created before the Finals Track feature.
+   - `supabase/migration_auth_hardening.sql`: adds the temporary-password expiry and login-lockout columns. **Run it (after `migration_security_hardening.sql`) before deploying any version from 2026-11-28 on.**
    - `supabase/migration_security_hardening.sql`: adds `User.sessionVersion`, enables Row Level Security and removes public API access. **Run this before deploying any version from 2026-11-28 on**; the app can't read users without the new column. Its last query should show `rls_enabled = true` and every `anon_*`/`authenticated_*` column `false`.
 3. `supabase/bsit_24_tasks.sql` (optional): the 24 Rizal QuestCard tasks for `BSIT241`.
 4. In the Supabase Dashboard, turn off **Authentication → Sign In / Providers → Allow new users to sign up** (RizLife doesn't use Supabase Auth). Then open **Advisors → Security Advisor** and refresh it.
@@ -72,20 +73,33 @@ npm run dev:admin     # http://localhost:3003
 
 ---
 
-## Seeded Test Credentials
+## Accounts & Passwords
 
-All seeded people are **fictional**. These passwords are public (they're in this README), so **rotate them, or delete the demo accounts, before real students use a deployment.**
+No usable password for a real deployment is stored in this repository.
 
-- **Supabase SQL / local JSON** (`setup.sql`, `.rizlife-db.json`): `admin@apc.edu.ph` / `Admin@RizLife2026`, `teacher@apc.edu.ph` / `Teacher@RizLife2026`, `jdelacruz@student.apc.edu.ph` / `Student@2026`
-- **Prisma demo seed** (`npm run db:seed`):
+- **Local development (local JSON database):** fictional demo accounts are created automatically. Their sign-in details are shown and pre-filled on each portal's login page **only** in local dev (`npm run dev:*` with no database configured). They never appear on a deployed portal.
+- **Supabase / Postgres:** `setup.sql` creates the starter admin, teacher and demo student **without a password**. Issue the first admin a temporary password (below), sign in, and create everyone else from the Admin Console or the Teacher Portal.
+- **Temporary passwords** are always random and shown once (with a CSV download for roster imports). They force a password change at first sign-in and expire after **7 days** if unused. Teachers and admins can't choose them. Signing in once with APC Microsoft SSO retires an unused temporary password.
+- **Sign-in protection:** wrong-password, unknown-email and deactivated-account failures look identical. After 5 failed attempts an account is locked for 15 minutes, and attempts are also throttled per IP and per email. Until a temporary password is changed, every API call returns 403.
+- Passwords chosen by users must be at least 8 characters and can't be one of the old published defaults.
 
-| Portal | Role | Email | Password | Notes |
-| --- | --- | --- | --- | --- |
-| **Student** (`:3001`) | `STUDENT` | `jdelacruz@student.apc.edu.ph` | `Student@2026` | 7 Stamped, 2 Pending, 1 Revision |
-| **Student** (`:3001`) | `STUDENT` | `msantos@student.apc.edu.ph` | `Student@2026` | Demonstrates forced password change |
-| **Teacher** (`:3002`) | `TEACHER` | `prof.mendoza@apc.edu.ph` | `Teacher@RizLife2026` | Owns section `IT241` (10 students, 12 quests) |
-| **Teacher** (`:3002`) | `TEACHER` | `prof.reyes@apc.edu.ph` | `Teacher@RizLife2026` | Owns section `IT242` |
-| **Admin** (`:3003`) | `ADMIN` | `admin@apc.edu.ph` | `Admin@RizLife2026` | Full system + teacher override access |
+### First admin (fresh Supabase/Postgres)
+```bash
+# with this project's DATABASE_URL or SUPABASE_URL + SUPABASE_SECRET_KEY in the root .env
+npm run accounts:temp-passwords -- --emails admin@apc.edu.ph            # dry run
+npm run accounts:temp-passwords -- --emails admin@apc.edu.ph --apply    # writes temp-passwords-*.csv
+```
+Open the CSV, sign in at the admin portal, choose a new password, then **delete the CSV**.
+
+### Rotating accounts still on an old published password
+Earlier versions shipped well-known passwords (and a guessable `RizLife@<last 6 digits of the student ID>` formula). To find and replace every account still using one:
+```bash
+npm run accounts:temp-passwords -- --known-defaults           # dry run: lists affected accounts
+npm run accounts:temp-passwords -- --known-defaults --apply   # new random temp passwords + ends their sessions
+```
+Hand each password out privately (teachers can distribute students' rows), then delete the CSV. `--no-password` selects accounts that have no password yet (e.g. after running a roster SQL file).
+
+The Prisma demo seed (`npm run db:seed`) still creates demo accounts with known passwords. It refuses to run against anything but a local database.
 
 ---
 

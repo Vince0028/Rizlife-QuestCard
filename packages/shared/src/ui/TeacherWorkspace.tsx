@@ -48,6 +48,7 @@ import { RizalQuestCardBoard } from "./RizalQuestCardBoard";
 import { StampCelebrationOverlay } from "./StampCelebrationOverlay";
 import { StatusBadge } from "./StatusBadge";
 import { apiFetch } from "./api-fetch";
+import { TemporaryPasswordDialog, type IssuedCredential } from "./TemporaryPasswordDialog";
 import type {
   WorkspaceSectionOption,
   WorkspaceQuestItem,
@@ -210,13 +211,12 @@ export function TeacherWorkspace({
   const [stuMiddle, setStuMiddle] = useState("");
   const [stuCourse, setStuCourse] = useState("BSIT");
   const [stuEmail, setStuEmail] = useState("");
-  const [stuPass, setStuPass] = useState("Student@2026");
+  const [issuedCredentials, setIssuedCredentials] = useState<IssuedCredential[] | null>(null);
   const [stuBusy, setStuBusy] = useState(false);
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showUploadStudentsModal, setShowUploadStudentsModal] = useState(false);
 
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importDefaultPass, setImportDefaultPass] = useState("Student@2026");
   const [importReport, setImportReport] = useState<{
     totalParsed: number;
     createdCount: number;
@@ -226,7 +226,6 @@ export function TeacherWorkspace({
   } | null>(null);
   const [importBusy, setImportBusy] = useState(false);
 
-  const [resetNewPass, setResetNewPass] = useState("Student@2026");
 
   const [showEditSection, setShowEditSection] = useState(false);
   const [editSecCode, setEditSecCode] = useState("");
@@ -1136,7 +1135,6 @@ export function TeacherWorkspace({
           middleName: stuMiddle || null,
           courseCode: stuCourse || null,
           email: stuEmail,
-          defaultPassword: stuPass || undefined,
         }),
       });
       const data = res.data;
@@ -1144,12 +1142,19 @@ export function TeacherWorkspace({
         showToast("err", data.error || "Could not add student.");
         return;
       }
-      showToast(
-        "ok",
-        data.created
-          ? `Added & enrolled ${data.student.email} (temporary password: ${data.defaultPassword}).`
-          : `Enrolled existing student ${data.student.email} into this section.`
-      );
+      if (data.created && data.temporaryPassword) {
+        setIssuedCredentials([
+          {
+            name: `${data.student.lastName}, ${data.student.firstName}`,
+            email: data.student.email,
+            temporaryPassword: data.temporaryPassword,
+            expiresAt: data.temporaryPasswordExpiresAt,
+          },
+        ]);
+        showToast("ok", `Added & enrolled ${data.student.email}.`);
+      } else {
+        showToast("ok", `Enrolled existing student ${data.student.email} into this section.`);
+      }
       setStuId("");
       setStuLast("");
       setStuFirst("");
@@ -1169,7 +1174,6 @@ export function TeacherWorkspace({
     try {
       const form = new FormData();
       form.append("sectionId", selectedSectionId);
-      form.append("defaultPassword", importDefaultPass);
       form.append("file", importFile);
 
       const res = await apiFetch(`${apiBase}/students/import`, {
@@ -1183,6 +1187,23 @@ export function TeacherWorkspace({
       }
       setImportReport(data as NonNullable<typeof importReport>);
       setImportFile(null);
+      const created = (data.credentials ?? []) as {
+        email: string;
+        lastName: string;
+        firstName: string;
+        temporaryPassword: string;
+        expiresAt: string;
+      }[];
+      if (created.length > 0) {
+        setIssuedCredentials(
+          created.map((c) => ({
+            name: `${c.lastName}, ${c.firstName}`,
+            email: c.email,
+            temporaryPassword: c.temporaryPassword,
+            expiresAt: c.expiresAt,
+          }))
+        );
+      }
       showToast(
         "ok",
         `Uploaded ${data.createdCount} new + ${data.enrolledExistingCount} existing students.`
@@ -1293,28 +1314,28 @@ export function TeacherWorkspace({
     const target = editStudentTarget;
     askConfirm({
       title: "Reset Student Password?",
-      description: `Reset password for ${target.lastName}, ${target.firstName} to the starter password below. They will be asked to choose a personal password on next login.`,
-      highlightText: `${target.email}  →  ${resetNewPass}`,
+      description: `Give ${target.lastName}, ${target.firstName} a new random temporary password. Their current password and any signed-in sessions stop working. They choose a personal password at next sign-in.`,
+      highlightText: target.email,
       confirmLabel: "Yes, Reset Password",
       variant: "warning",
       onConfirm: async () => {
         const res = await apiFetch(
           `${apiBase}/students/${target.id}/reset-password`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ newPassword: resetNewPass }),
-          }
+          { method: "POST" }
         );
         const data = res.data;
         if (!res.ok) {
           showToast("err", data.error || "Password reset failed.");
           return;
         }
-        showToast(
-          "ok",
-          `Temporary password reset for ${target.email}. They will change it on next login.`
-        );
+        setIssuedCredentials([
+          {
+            name: `${target.lastName}, ${target.firstName}`,
+            email: target.email,
+            temporaryPassword: data.temporaryPassword,
+            expiresAt: data.expiresAt,
+          },
+        ]);
         setEditStudentTarget(null);
         await loadWorkspace(selectedSectionId);
       },
@@ -2709,18 +2730,9 @@ export function TeacherWorkspace({
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-              Starter Default Password
-            </label>
-            <input
-              required
-              minLength={6}
-              value={stuPass}
-              onChange={(e) => setStuPass(e.target.value)}
-              className="folio-input w-full px-3 py-2 font-mono text-xs"
-            />
-          </div>
+          <p className="text-[11px] text-[#5E5246]">
+            A random temporary password is generated and shown once after the student is created.
+          </p>
 
           <button
             type="submit"
@@ -2757,18 +2769,10 @@ export function TeacherWorkspace({
             className="block w-full border border-dashed border-[#B59A6C] bg-[#EFE6D2] p-2.5 text-xs"
           />
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-              Starter Password for Uploaded Students
-            </label>
-            <input
-              required
-              minLength={6}
-              value={importDefaultPass}
-              onChange={(e) => setImportDefaultPass(e.target.value)}
-              className="folio-input w-full px-3 py-2 font-mono text-xs"
-            />
-          </div>
+          <p className="text-[11px] text-[#5E5246]">
+            Each new student gets their own random temporary password. You&apos;ll see them
+            once after the upload, with a CSV download. A password column in the file is ignored.
+          </p>
 
           <button
             type="submit"
@@ -3428,24 +3432,16 @@ export function TeacherWorkspace({
 
             <div className="space-y-2.5 border-t border-[#C6B393] pt-4">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5E5246]">
-                Reset Starter Password
+                Forgotten Password
               </label>
-              <div className="flex gap-2">
-                <input
-                  minLength={6}
-                  value={resetNewPass}
-                  onChange={(e) => setResetNewPass(e.target.value)}
-                  className="folio-input flex-1 px-3 py-2 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleResetStudentPasswordFromEdit}
-                  className="btn-heritage-ink px-3 py-2 text-xs"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  Reset PW
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleResetStudentPasswordFromEdit}
+                className="btn-heritage-ink w-full px-3 py-2 text-xs"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Issue New Temporary Password
+              </button>
             </div>
 
             <div className="border-t border-[#C6B393] pt-4">
@@ -3589,6 +3585,16 @@ export function TeacherWorkspace({
           </div>
         </form>
       </ModalDrawer>
+
+      <TemporaryPasswordDialog
+        credentials={issuedCredentials}
+        onClose={() => setIssuedCredentials(null)}
+        title={
+          issuedCredentials && issuedCredentials.length > 1
+            ? "Temporary Passwords for New Students"
+            : "Temporary Password"
+        }
+      />
 
       <ConfirmDialog
         open={Boolean(confirmState)}
