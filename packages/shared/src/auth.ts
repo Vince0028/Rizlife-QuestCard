@@ -48,6 +48,8 @@ export async function signSessionToken(payload: SessionPayload): Promise<string>
     courseCode: payload.courseCode,
     mustChangePassword: payload.mustChangePassword,
     portal: payload.portal,
+    sv: payload.sessionVersion ?? 0,
+    am: payload.authMethod ?? "password",
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.userId)
@@ -90,6 +92,8 @@ export async function verifySessionToken(
       courseCode: (payload.courseCode as string | null) ?? null,
       mustChangePassword: Boolean(payload.mustChangePassword),
       portal,
+      sessionVersion: typeof payload.sv === "number" ? payload.sv : 0,
+      authMethod: payload.am === "sso" ? "sso" : "password",
     };
   } catch {
     return null;

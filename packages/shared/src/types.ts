@@ -71,6 +71,10 @@ export interface SessionPayload {
   courseCode: string | null;
   mustChangePassword: boolean;
   portal: PortalKey;
+  /** User.sessionVersion when the token was issued (missing on pre-2026-11 tokens = 0). */
+  sessionVersion?: number;
+  /** How the user signed in. SSO sessions aren't gated by a pending temporary password. */
+  authMethod?: "password" | "sso";
 }
 
 export interface LeaderboardEntry {

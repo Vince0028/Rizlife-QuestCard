@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS "User" (
     "mustChangePassword" BOOLEAN NOT NULL DEFAULT false,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "microsoftOid" TEXT,
+    "sessionVersion" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
@@ -136,6 +137,9 @@ CREATE TABLE IF NOT EXISTS "SystemSetting" (
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "SystemSetting_pkey" PRIMARY KEY ("id")
 );
+
+-- Columns added after a table was first created (re-runs on older databases)
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "sessionVersion" INTEGER NOT NULL DEFAULT 0;
 
 -- 3. Indexes
 CREATE UNIQUE INDEX IF NOT EXISTS "User_studentId_key" ON "User"("studentId");
@@ -339,11 +343,28 @@ JOIN "Section" s ON s."code" = 'BSIT241' AND s."term" = 'Term 2 AY 2026-2027'
 WHERE u."email" = 'jdelacruz@student.apc.edu.ph'
 ON CONFLICT ("studentId", "sectionId") DO NOTHING;
 
--- 9. Grant Supabase API Role Permissions (for SUPABASE_URL + SUPABASE_SECRET_KEY)
-GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+-- 9. API permissions. The app's server key (SUPABASE_SECRET_KEY = service_role) gets
+--    full access; the public API roles get none (anon = anyone holding the publishable
+--    key, authenticated = any Supabase Auth user). RLS is on with no policies as a
+--    second layer; service_role and the table owner (DATABASE_URL) bypass it.
+--    Also: Authentication -> Sign In / Providers -> turn OFF "Allow new users to sign up".
+GRANT USAGE ON SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
+
+ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Section" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Enrollment" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Quest" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Submission" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "EmailDigestLog" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "SystemSetting" ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 
 -- 10. Quick Verification Output (Last Name, First Name, Middle Name)
 SELECT

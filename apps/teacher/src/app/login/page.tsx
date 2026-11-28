@@ -10,6 +10,8 @@ export default async function TeacherLoginPage({
 }) {
   const params = await searchParams;
   const errorMap: Record<string, string> = {
+    session_expired:
+      "Your session has ended (your password or account access changed). Please sign in again.",
     unauthorized:
       "Access restricted to Faculty & Admin accounts (@apc.edu.ph). Students should use the Student QuestCard portal.",
     sso_disabled:

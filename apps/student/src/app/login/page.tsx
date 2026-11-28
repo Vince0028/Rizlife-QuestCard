@@ -10,6 +10,8 @@ export default async function StudentLoginPage({
 }) {
   const params = await searchParams;
   const errorMap: Record<string, string> = {
+    session_expired:
+      "Your session has ended (your password or account access changed). Please sign in again.",
     unauthorized:
       "Access restricted to Student accounts (@student.apc.edu.ph). Teachers and Admins should use their dedicated portal.",
     sso_disabled:

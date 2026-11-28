@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkCronAuthorization } from "@rizlife/shared/cron-auth";
 import { runScheduledDigests } from "@rizlife/shared/digest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET?.trim();
-  if (cronSecret) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized cron invocation" }, { status: 401 });
-    }
+  const auth = checkCronAuthorization(req.headers.get("authorization"));
+  if (!auth.ok) {
+    if (auth.status === 503) console.error(`[RizLife Cron] ${auth.error}`);
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const dispatched = await runScheduledDigests();

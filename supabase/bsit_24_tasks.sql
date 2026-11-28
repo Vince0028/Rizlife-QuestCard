@@ -170,7 +170,7 @@ SET
   "updatedAt" = CURRENT_TIMESTAMP;
 
 -- 3. Grant Supabase API Permissions (so SUPABASE_URL + SUPABASE_SECRET_KEY sync directly)
-GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;

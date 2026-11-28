@@ -49,9 +49,12 @@ Copy `.env.example` to `.env` at the repository root. All three apps read this o
 
 **Supabase (SQL Editor):** run these in order in **Supabase Dashboard → SQL Editor**:
 1. `supabase/setup.sql`: tables, global settings, the demo admin, teacher and student, section `BSIT241`, and API grants.
-2. `supabase/migration_finals_track.sql`: **only for databases created before the Finals Track feature.** It adds `Enrollment.finalsTrack`/`assignedModule*`. Fresh `setup.sql` runs already include these.
+2. **Existing databases only** (fresh `setup.sql` runs already include these):
+   - `supabase/migration_finals_track.sql`: adds `Enrollment.finalsTrack`/`assignedModule*`, for databases created before the Finals Track feature.
+   - `supabase/migration_security_hardening.sql`: adds `User.sessionVersion`, enables Row Level Security and removes public API access. **Run this before deploying any version from 2026-11-28 on**; the app can't read users without the new column. Its last query should show `rls_enabled = true` and every `anon_*`/`authenticated_*` column `false`.
 3. `supabase/bsit_24_tasks.sql` (optional): the 24 Rizal QuestCard tasks for `BSIT241`.
-4. Students: import the class roster through **Teacher Portal → Students → Import (.xlsx / .csv)**. For SQL seeding, copy `supabase/students.example.sql` (see [Data Privacy](#data-privacy--student-records)).
+4. In the Supabase Dashboard, turn off **Authentication → Sign In / Providers → Allow new users to sign up** (RizLife doesn't use Supabase Auth). Then open **Advisors → Security Advisor** and refresh it.
+5. Students: import the class roster through **Teacher Portal → Students → Import (.xlsx / .csv)**. For SQL seeding, copy `supabase/students.example.sql` (see [Data Privacy](#data-privacy--student-records)).
 
 **Prisma (`DATABASE_URL` set):**
 ```bash
@@ -103,6 +106,12 @@ npm run test:e2e         # Playwright smoke tests (run `npm run build` first; fi
 
 ---
 
+## Sessions
+
+Sessions last up to 7 days, but every protected page and API call re-checks the account in the database. Deactivating or deleting a user, changing their role, or resetting their password ends their sessions right away. Changing your own password signs out your other devices.
+
+---
+
 ## Production Database Notes
 
 - **Prefer `DATABASE_URL`** (Supabase transaction pooler). The PostgREST adapter (`packages/shared/src/db-adapter/`) keeps a short-lived in-memory snapshot of every table and re-downloads it on cache misses. Large digest email bodies (`EmailDigestLog.htmlPreview`) are left out and loaded on demand. Cost still grows with total data, not per-request data.
@@ -136,7 +145,7 @@ Because `apps/student`, `apps/teacher`, and `apps/admin` live in dedicated folde
    - `NEXT_PUBLIC_STUDENT_PORTAL_URL` — e.g. `https://rizlife-student.vercel.app`
    - `NEXT_PUBLIC_TEACHER_PORTAL_URL` — e.g. `https://rizlife-teacher.vercel.app`
    - `NEXT_PUBLIC_ADMIN_PORTAL_URL` — e.g. `https://rizlife-admin.vercel.app`
-   - `CRON_SECRET` — secret bearer token for `apps/teacher`'s scheduled cron (`/api/cron/digest`)
+   - `CRON_SECRET` — **required** on the teacher project: a random string of 16+ characters. Without it the scheduled digest endpoint (`/api/cron/digest`) refuses every call. Vercel sends it to the cron automatically.
    - Email transport (`RESEND_API_KEY` or `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM`)
    - Phase 2 SSO (optional until APC IT provides keys): `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET`, `AZURE_AD_TENANT_ID`
 

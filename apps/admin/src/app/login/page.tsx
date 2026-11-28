@@ -10,6 +10,8 @@ export default async function AdminLoginPage({
 }) {
   const params = await searchParams;
   const errorMap: Record<string, string> = {
+    session_expired:
+      "Your session has ended (your password or account access changed). Please sign in again.",
     unauthorized:
       "Access restricted to Administrator accounts. Teachers and Students should sign in on their dedicated portals.",
     sso_disabled:

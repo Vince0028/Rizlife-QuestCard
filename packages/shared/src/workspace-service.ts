@@ -992,6 +992,8 @@ export async function resetManagedUserPassword(params: {
     data: {
       passwordHash,
       mustChangePassword: true,
+      // Ends every session that knew the old password.
+      sessionVersion: (target.sessionVersion ?? 0) + 1,
     },
   });
 

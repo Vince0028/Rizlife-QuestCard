@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@rizlife/shared/portal-auth";
 import { listManageableSections } from "@rizlife/shared/workspace-service";
 import { getTeacherSession } from "@/lib/session";
 import { TeacherDashboardClient } from "@/components/TeacherDashboardClient";
@@ -11,7 +12,7 @@ export default async function TeacherDashboardPage({
   searchParams: Promise<{ section?: string; tab?: string }>;
 }) {
   const session = await getTeacherSession();
-  if (!session) redirect("/login");
+  if (!session) redirect(SESSION_ENDED_PATH);
   if (session.mustChangePassword) redirect("/change-password");
 
   const params = await searchParams;

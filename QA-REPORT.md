@@ -50,7 +50,9 @@
 
 **M3** (student leaderboard payload) and **M4** (Asia/Manila timestamps on UTC hosts) were fixed on 2026-11-28 and are covered by `__tests__/timezone-privacy.ts`.
 
-Still open from §3: **H1–H4**, **M1** (cron endpoint is open when `CRON_SECRET` is unset), **M5**, **L1**, **L10**.
+**H3** (sessions re-checked against the database, revoked via `User.sessionVersion`), **H4** (RLS on all 7 tables, public API roles revoked: `supabase/migration_security_hardening.sql`) and **M1** (the cron endpoint fails closed without `CRON_SECRET`) were fixed on 2026-11-28 and are covered by `__tests__/session-revocation.ts`. **H4 still has to be applied to the live Supabase project** (run the migration, turn off Auth sign-ups, refresh the Security Advisor).
+
+Still open from §3: **H1** (rotate the demo/admin passwords on the live database), **H2** (shared starter passwords, no login rate limiting), **M5**, **L1**, **L10**.
 
 ---
 

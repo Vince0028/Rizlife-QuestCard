@@ -16,6 +16,7 @@ ALTER TABLE "Enrollment"
   ADD COLUMN IF NOT EXISTS "assignedModuleTitle" TEXT,
   ADD COLUMN IF NOT EXISTS "assignedModuleUrl" TEXT;
 
--- 3. Verify permissions for service_role and authenticated roles
+-- 3. Permissions: the app's server key (service_role) only. The public API roles
+--    (anon / authenticated) get no table access; see migration_security_hardening.sql.
 GRANT ALL ON TABLE "Enrollment" TO postgres, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "Enrollment" TO authenticated;
+REVOKE ALL ON TABLE "Enrollment" FROM anon, authenticated;

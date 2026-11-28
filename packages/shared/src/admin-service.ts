@@ -61,9 +61,15 @@ export async function updateUserAsAdmin(params: {
     }
   }
 
+  // Losing access or changing role ends the user's current sessions immediately.
+  const revokeSessions =
+    (data.role !== undefined && data.role !== existing.role) ||
+    (data.isActive === false && existing.isActive);
+
   return prisma.user.update({
     where: { id: existing.id },
     data: {
+      ...(revokeSessions && { sessionVersion: (existing.sessionVersion ?? 0) + 1 }),
       ...(data.firstName !== undefined && { firstName: data.firstName }),
       ...(data.lastName !== undefined && { lastName: data.lastName }),
       ...(data.middleName !== undefined && { middleName: data.middleName || null }),

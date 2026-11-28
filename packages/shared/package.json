@@ -15,6 +15,7 @@
     "./leaderboard": "./src/leaderboard.ts",
     "./deadline": "./src/deadline.ts",
     "./digest": "./src/digest.ts",
+    "./cron-auth": "./src/cron-auth.ts",
     "./excel": "./src/excel.ts",
     "./validation": "./src/validation.ts",
     "./types": "./src/types.ts",

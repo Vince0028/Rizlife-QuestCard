@@ -9,6 +9,7 @@ import { runAdapterLazyColumnChecks } from "./adapter-lazy-columns";
 import { runRouteAuthChecks } from "./route-auth";
 import { runHardeningChecks } from "./hardening";
 import { runTimezoneAndPrivacyChecks } from "./timezone-privacy";
+import { runSessionRevocationChecks } from "./session-revocation";
 import { signSessionToken, verifySessionToken } from "../auth";
 import { hashPassword, verifyPassword } from "../password";
 import { createSectionSchema, validateSubmissionUrl } from "../validation";
@@ -266,7 +267,10 @@ async function run() {
   // 13. Asia/Manila timestamps on UTC hosts + student-safe leaderboard rows
   await runTimezoneAndPrivacyChecks();
 
-  // 14. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
+  // 14. Session revocation (H3) + fail-closed cron authorization (M1)
+  await runSessionRevocationChecks();
+
+  // 15. Supabase backend: EmailDigestLog.htmlPreview is lazy (not in table snapshots).
   //     Keep last: it points the adapter at a fake PostgREST for its duration.
   await runAdapterLazyColumnChecks();
 

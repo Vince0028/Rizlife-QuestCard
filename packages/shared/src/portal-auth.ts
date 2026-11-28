@@ -15,6 +15,52 @@ import {
 } from "./microsoft-sso";
 import { changePasswordSchema, loginSchema } from "./validation";
 import type { PortalKey, RoleValue, SessionPayload } from "./types";
+import { NextResponse } from "next/server";
+import { getClearCookieOptions } from "./auth";
+
+/**
+ * Server-side session check used by every protected page and API route
+ * (each app's src/lib/session.ts). The JWT signature alone only proves the token was issued
+ * once; this also re-reads the user and rejects the session when:
+ *   - the user was deleted or deactivated,
+ *   - the role changed (or no longer fits this portal),
+ *   - User.sessionVersion moved on (password change/reset, deactivation, role change),
+ *   - a temporary password is pending but the token predates it (password sessions only).
+ * The returned payload carries the current profile values from the database.
+ */
+export async function getValidatedSession(
+  token: string | undefined | null,
+  portal: PortalKey
+): Promise<SessionPayload | null> {
+  const claims = await verifySessionToken(token, portal);
+  if (!claims) return null;
+  return revalidateSessionClaims(claims);
+}
+
+export async function revalidateSessionClaims(
+  claims: SessionPayload
+): Promise<SessionPayload | null> {
+  const user = await prisma.user.findUnique({ where: { id: claims.userId } });
+  if (!user || !user.isActive) return null;
+  if (user.role !== claims.role) return null;
+  if (!PORTAL_ALLOWED_ROLES[claims.portal].includes(user.role as RoleValue)) return null;
+  if ((user.sessionVersion ?? 0) !== (claims.sessionVersion ?? 0)) return null;
+
+  const isSso = claims.authMethod === "sso";
+  if (!isSso && user.mustChangePassword && !claims.mustChangePassword) return null;
+
+  return {
+    ...claims,
+    email: user.email,
+    firstName: user.firstName,
+    middleName: user.middleName ?? null,
+    lastName: user.lastName,
+    studentId: user.studentId,
+    courseCode: user.courseCode,
+    // SSO sessions skip the temporary-password gate (Entra ID authenticated the user).
+    mustChangePassword: isSso ? false : user.mustChangePassword,
+  };
+}
 
 export interface AuthActionResult {
   status: number;
@@ -89,6 +135,8 @@ export async function performPortalLogin(
     courseCode: user.courseCode,
     mustChangePassword: user.mustChangePassword,
     portal,
+    sessionVersion: user.sessionVersion ?? 0,
+    authMethod: "password",
   };
 
   const token = await signSessionToken(payload);
@@ -115,9 +163,11 @@ export async function performChangePassword(
   portal: PortalKey,
   rawBody: unknown
 ): Promise<AuthActionResult> {
-  const session = await verifySessionToken(token, portal);
+  // A revoked session (e.g. from before an admin reset this password) can't be used to
+  // pick a new password: with mustChangePassword set, no current password is asked for.
+  const session = await getValidatedSession(token, portal);
   if (!session) {
-    return { status: 401, body: { error: "Unauthorized" } };
+    return { status: 401, body: { error: "Your session has ended. Please sign in again." } };
   }
 
   const parsed = changePasswordSchema.safeParse(rawBody);
@@ -147,11 +197,14 @@ export async function performChangePassword(
   }
 
   const newHash = await hashPassword(parsed.data.newPassword);
+  // New sessionVersion: every other session for this account (other devices, a
+  // stolen cookie) ends; this browser gets a fresh token below.
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: {
       passwordHash: newHash,
       mustChangePassword: false,
+      sessionVersion: (user.sessionVersion ?? 0) + 1,
     },
   });
 
@@ -166,6 +219,8 @@ export async function performChangePassword(
     courseCode: updated.courseCode,
     mustChangePassword: false,
     portal,
+    sessionVersion: updated.sessionVersion,
+    authMethod: session.authMethod ?? "password",
   };
 
   const newToken = await signSessionToken(refreshedPayload);
@@ -384,6 +439,8 @@ export async function performMicrosoftCallback(params: {
       // Entra ID authenticated the user, so a pending temporary password does not gate SSO.
       mustChangePassword: false,
       portal: params.portal,
+      sessionVersion: user.sessionVersion ?? 0,
+      authMethod: "sso",
     });
 
     return {
@@ -398,3 +455,20 @@ export async function performMicrosoftCallback(params: {
     return fail("sso_failed");
   }
 }
+
+/**
+ * GET /api/auth/session-ended on each portal. Pages send a revoked session here: it
+ * clears the cookie and goes to the login page. (Redirecting straight to /login would
+ * loop, because the middleware only checks the signature and sends a validly signed
+ * cookie from /login back to /dashboard.)
+ */
+export function createSessionEndedHandler(portal: PortalKey) {
+  return async function GET(req: Request) {
+    const res = NextResponse.redirect(new URL("/login?error=session_expired", req.url), 303);
+    res.cookies.set(PORTAL_COOKIES[portal], "", getClearCookieOptions());
+    return res;
+  };
+}
+
+/** Where a page sends a user whose session no longer validates. */
+export const SESSION_ENDED_PATH = "/api/auth/session-ended";

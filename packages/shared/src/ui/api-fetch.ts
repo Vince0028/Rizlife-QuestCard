@@ -51,5 +51,10 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<ApiRe
   if (!res.ok && typeof data.error !== "string") {
     data = { ...data, error: defaultErrorFor(res.status) };
   }
+  // The session was revoked while the page was open (password reset, deactivation,
+  // role change): clear the cookie and go to the login page.
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.location.assign("/api/auth/session-ended");
+  }
   return { ok: res.ok, status: res.status, data };
 }

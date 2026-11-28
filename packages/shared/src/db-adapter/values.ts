@@ -48,11 +48,16 @@ export function cloneRow(row: AnyRecord): AnyRecord {
  */
 export function hydrateRow(table: TableName, raw: AnyRecord, lazyAbsent = false): AnyRecord {
   const lazy = lazyAbsent ? LAZY_REMOTE_COLUMNS[table] ?? [] : [];
+  const { columns, defaults } = SCHEMA[table];
   const out: AnyRecord = {};
-  for (const [name, col] of Object.entries(SCHEMA[table].columns)) {
+  for (const [name, col] of Object.entries(columns)) {
     const v = raw[name];
     if (v === undefined && lazy.includes(name)) continue;
-    out[name] = col.type === "DateTime" ? parseDate(v) : v === undefined ? null : v;
+    if (col.type === "DateTime") out[name] = parseDate(v);
+    // A column added after the row was written (e.g. an older .rizlife-db.json) gets
+    // its schema default, like Postgres does for ADD COLUMN ... DEFAULT.
+    else if (v === undefined) out[name] = name in defaults ? defaults[name] : null;
+    else out[name] = v;
   }
   return out;
 }
